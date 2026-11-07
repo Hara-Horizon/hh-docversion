@@ -1,6 +1,6 @@
 # hh-docversion
 
-[![CI](https://github.com/harahorizon/hh-docversion/actions/workflows/ci.yml/badge.svg)](https://github.com/harahorizon/hh-docversion/actions/workflows/ci.yml)
+[![CI](https://github.com/Hara-Horizon/hh-docversion/actions/workflows/ci.yml/badge.svg)](https://github.com/Hara-Horizon/hh-docversion/actions/workflows/ci.yml)
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/License-MIT%20OR%20Apache--2.0-blue.svg)](LICENSE-MIT)
 [![Telemetry](https://img.shields.io/badge/telemetry-zero-brightgreen.svg)](#zero-telemetry)
 [![Rust](https://img.shields.io/badge/rust-1.78%2B-orange.svg)](Cargo.toml)
@@ -26,14 +26,57 @@ Designed for local-first systems, embedded ledgers, and privacy-focused teams wh
 
 ## Installation
 
-### Build and Install from Source
+### Prerequisites
+
+Ensure you have a modern Rust toolchain installed (MSRV: **1.78+**):
 
 ```bash
-cargo install --path crates/cargo-docversion --force
+rustup update stable
 
 ```
 
-This installs both the `docversion` standalone CLI and the `cargo-docversion` Cargo plugin into `~/.cargo/bin`.
+### Option 1: Install from GitHub (Recommended)
+
+Install the latest release directly from GitHub into `~/.cargo/bin`:
+
+```bash
+cargo install --git [https://github.com/Hara-Horizon/hh-docversion.git](https://github.com/Hara-Horizon/hh-docversion.git) cargo-docversion --locked
+
+```
+
+To pin to a specific release tag or commit SHA for reproducible CI pipelines:
+
+```bash
+# Pin to a tagged release
+cargo install --git [https://github.com/Hara-Horizon/hh-docversion.git](https://github.com/Hara-Horizon/hh-docversion.git) --tag v0.1.0 cargo-docversion --locked
+
+# Pin to a specific commit SHA
+cargo install --git [https://github.com/Hara-Horizon/hh-docversion.git](https://github.com/Hara-Horizon/hh-docversion.git) --rev <COMMIT_SHA> cargo-docversion --locked
+
+```
+
+### Option 2: Build and Install from Local Source
+
+If you have cloned the repository locally:
+
+```bash
+cargo install --path crates/cargo-docversion --force --locked
+
+```
+
+Both options install the standalone CLI (`docversion`) and the Cargo plugin (`cargo-docversion`) into `~/.cargo/bin`.
+
+### Option 3: Use as a Library Dependency
+
+To integrate `docversion` engines into another Rust project:
+
+```toml
+[dependencies]
+docversion-core = { git = "[https://github.com/Hara-Horizon/hh-docversion.git](https://github.com/Hara-Horizon/hh-docversion.git)", tag = "v0.1.0" }
+docversion-git = { git = "[https://github.com/Hara-Horizon/hh-docversion.git](https://github.com/Hara-Horizon/hh-docversion.git)", tag = "v0.1.0" }
+docversion-manifest = { git = "[https://github.com/Hara-Horizon/hh-docversion.git](https://github.com/Hara-Horizon/hh-docversion.git)", tag = "v0.1.0" }
+
+```
 
 ---
 
@@ -98,12 +141,12 @@ Document your modules and types using clean markdown or blockquote tags. `hh-doc
 > Guarantees absolute deterministic ledger accounting and verification.
 
 #### **System Invariants**
-* 🛡️ `Zero-sum debit and credit balances across every committed journal transaction.`
-* 🛡️ `Monotonic sequence increments: rejected if timestamp or index regresses.`
+- 🛡️ `Zero-sum debit and credit balances across every committed journal transaction.`
+- 🛡️ `Monotonic sequence increments: rejected if timestamp or index regresses.`
 
 #### **Programmatic Invariants & Rejection Boundaries**
-* 🔒 `assert_eq`: `debit_total == credit_total`
-* 🚫 Reject: `Err(HaraError::Validation("Zero-amount transaction rejected"))`
+- 🔒 `assert_eq`: `debit_total == credit_total`
+- 🚫 Reject: `Err(HaraError::Validation("Zero-amount transaction rejected"))`
 
 ```
 
