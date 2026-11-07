@@ -1,0 +1,153 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-binaries:
+    name: Build (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Linux x86_64
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            archive_name: docversion-x86_64-unknown-linux-gnu
+            use_cross: false
+
+          # Linux aarch64
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            archive_name: docversion-aarch64-unknown-linux-gnu
+            use_cross: true
+
+          # macOS Apple Silicon
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            archive_name: docversion-aarch64-apple-darwin
+            use_cross: false
+
+          # macOS Intel
+          - os: macos-13
+            target: x86_64-apple-darwin
+            archive_name: docversion-x86_64-apple-darwin
+            use_cross: false
+
+          # Windows x86_64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            archive_name: docversion-x86_64-pc-windows-msvc
+            use_cross: false
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install cross (if required)
+        if: matrix.use_cross
+        run: cargo install cross --git https://github.com/cross-rs/cross
+
+      - name: Build release binaries
+        run: |
+          if [ "${{ matrix.use_cross }}" = "true" ]; then
+            cross build --release --target ${{ matrix.target }} -p cargo-docversion --bins
+          else
+            cargo build --release --target ${{ matrix.target }} -p cargo-docversion --bins
+          fi
+        shell: bash
+
+      - name: Package artifacts (Unix)
+        if: matrix.os != 'windows-latest'
+        run: |
+          staging="${{ matrix.archive_name }}"
+          mkdir -p "$staging"
+          cp target/${{ matrix.target }}/release/docversion "$staging/"
+          cp target/${{ matrix.target }}/release/cargo-docversion "$staging/"
+          cp README.md LICENSE-* "$staging/" 2>/dev/null || true
+          tar -czf "${staging}.tar.gz" "$staging"
+          shasum -a 256 "${staging}.tar.gz" > "${staging}.tar.gz.sha256"
+        shell: bash
+
+      - name: Package artifacts (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          $staging = "${{ matrix.archive_name }}"
+          New-Item -ItemType Directory -Force -Path $staging
+          Copy-Item "target/${{ matrix.target }}/release/docversion.exe" -Destination $staging
+          Copy-Item "target/${{ matrix.target }}/release/cargo-docversion.exe" -Destination $staging
+          if (Test-Path "README.md") { Copy-Item "README.md" -Destination $staging }
+          Compress-Archive -Path "$staging/*" -DestinationPath "${staging}.zip"
+          $hash = (Get-FileHash -Path "${staging}.zip" -Algorithm SHA256).Hash.ToLower()
+          "$hash  ${staging}.zip" | Out-File -Encoding ascii "${staging}.zip.sha256"
+        shell: pwsh
+
+      - name: Upload artifact archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.archive_name }}
+          path: |
+            ${{ matrix.archive_name }}.tar.gz
+            ${{ matrix.archive_name }}.tar.gz.sha256
+            ${{ matrix.archive_name }}.zip
+            ${{ matrix.archive_name }}.zip.sha256
+          if-no-files-found: error
+
+  draft-release:
+    name: Create GitHub Release Draft
+    needs: build-binaries
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download all built artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Prepare release body from template
+        id: release_notes
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          template_path="docversion/.github/release_template.md"
+          notes_path="release_notes.md"
+
+          if [ -f "$template_path" ]; then
+            sed "s/\$VERSION/$version/g" "$template_path" > "$notes_path"
+          elif [ -f ".github/release_template.md" ]; then
+            sed "s/\$VERSION/$version/g" ".github/release_template.md" > "$notes_path"
+          else
+            echo "## Release $GITHUB_REF_NAME" > "$notes_path"
+          fi
+
+          echo "notes_file=$notes_path" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release Draft
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          prerelease: false
+          body_path: ${{ steps.release_notes.outputs.notes_file }}
+          files: |
+            release-assets/*.tar.gz
+            release-assets/*.tar.gz.sha256
+            release-assets/*.zip
+            release-assets/*.zip.sha256
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-D warnings"
+
+jobs:
+  test:
+    name: Test Suite & Doc-Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Check workspace
+        run: cargo check --workspace --all-targets
+
+      - name: Run unit & integration tests
+        run: cargo test --workspace --all-targets
+
+      - name: Run doc-tests
+        run: cargo test --workspace --doc
+
+  binaries:
+    name: Build & Verify Binaries
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-docversion and docversion
+        run: cargo install --path crates/cargo-docversion --force
+
+      - name: Verify docversion binary
+        run: |
+          docversion --version
+          docversion --help
+
+      - name: Verify cargo-docversion plugin
+        run: |
+          cargo docversion --version
+          cargo docversion --help
+
+      - name: Dogfood documentation build
+        run: |
+          docversion build-site --out-dir target/ci_doc_site
+          test -f target/ci_doc_site/versions.json
+          test -f target/ci_doc_site/index.html
+          test -d target/ci_doc_site/latest
