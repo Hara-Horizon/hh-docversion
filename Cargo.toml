@@ -1,0 +1,28 @@
+[workspace]
+members = [
+    "crates/docversion-core",
+    "crates/docversion-git",
+    "crates/docversion-manifest",
+    "crates/cargo-docversion",
+    "xtask",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.78"
+authors = ["Docversion Contributors"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/example/docversion"
+
+[workspace.dependencies]
+cargo_metadata = "0.18"
+clap = { version = "4.5", features = ["derive"] }
+anyhow = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+semver = { version = "1.0", features = ["serde"] }
+thiserror = "1.0"
+sha2 = "0.10"
+gix = { version = "0.66", default-features = false, features = ["status"] }

@@ -1,0 +1,19 @@
+{
+  "generated_at": "2026-11-07T00:00:00Z",
+  "contracts": [
+    {
+      "schema_id": "core-ledger",
+      "schema_version": 1,
+      "supported_app_range": ">=0.1.0, <0.5.0",
+      "artifact_uri": "https://artifacts.local/schemas/core-ledger-v1.sqlite",
+      "sha256": "ba93a56a8fe9befface03cc6b575aebef8cb8cde4d259452aeea11cab154fb74"
+    },
+    {
+      "schema_id": "core-ledger",
+      "schema_version": 2,
+      "supported_app_range": ">=0.5.0, <1.0.0",
+      "artifact_uri": "https://artifacts.local/schemas/core-ledger-v2.sqlite",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ]
+}
