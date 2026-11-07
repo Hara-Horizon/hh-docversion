@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cargo check --workspace --quiet
+
+if [ -f "schema_matrix.json" ]; then
+    python3 -c "import json; json.load(open('schema_matrix.json'))" >/dev/null 2>&1 || {
+        echo "==> [pre-commit] Invalid JSON in schema_matrix.json"
+        exit 1
+    }
+fi
