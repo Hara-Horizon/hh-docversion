@@ -61,7 +61,8 @@ jobs:
 
       - name: Dogfood documentation build
         run: |
-          docversion build-site --out-dir target/ci_doc_site
+          cargo docversion doc --no-deps
+          cargo docversion build-site --out-dir target/ci_doc_site
           test -f target/ci_doc_site/versions.json
           test -f target/ci_doc_site/index.html
           test -d target/ci_doc_site/latest
