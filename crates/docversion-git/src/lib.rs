@@ -46,7 +46,7 @@ pub fn compute_doc_revision<P: AsRef<Path>>(repo_path: P, _paths: &[&str]) -> Re
 }
 
 fn check_is_dirty(repo: &gix::Repository) -> bool {
-    let work_dir = match repo.work_dir() {
+    let work_dir = match repo.workdir() {
         Some(w) => w,
         None => return false,
     };
