@@ -30,33 +30,46 @@ Designed for local-first systems, embedded ledgers, and privacy-focused teams wh
 
 ```bash
 cargo install --path crates/cargo-docversion --force
-This installs both the docversion standalone CLI and the cargo-docversion Cargo plugin into ~/.cargo/bin.
 
-Quick Start
-1. Document & Bundle Multi-Version Rust Trees
-Bash
+```
+
+This installs both the `docversion` standalone CLI and the `cargo-docversion` Cargo plugin into `~/.cargo/bin`.
+
+---
+
+## Quick Start
+
+### 1. Document & Bundle Multi-Version Rust Trees
+
+```bash
 # Document workspace crates with injected Obsidian topbar and theme
 cargo docversion doc --no-deps
 
 # Assemble versioned distribution tree into target/doc_site and generate llms.txt
 cargo docversion build-site --out-dir target/doc_site
+
+```
+
 Or run the all-in-one pipeline:
 
-Bash
+```bash
 cargo docversion site --out-dir target/doc_site
-2. Autonomous Agent Context (llms.txt)
-Every build-site run generates an agent-ready documentation bundle:
 
-target/doc_site/llms.txt: Primary context file containing crate intent, module contracts, and public API interfaces.
+```
 
-target/doc_site/api-reference.md: Mirrored reference markdown.
+### 2. Autonomous Agent Context (`llms.txt`)
 
-target/doc_site/vX.Y.Z/llms.txt: Version-locked agent manifest.
+Every `build-site` run generates an agent-ready documentation bundle:
 
-3. Documenting Architectural Intent & Contracts
-Document your modules and types using clean markdown or blockquote tags. hh-docversion parses them for agents in llms.txt while rendering styled callouts for human readers in Rustdoc:
+* `target/doc_site/llms.txt`: Primary context file containing crate intent, module contracts, and public API interfaces.
+* `target/doc_site/api-reference.md`: Mirrored reference markdown.
+* `target/doc_site/vX.Y.Z/llms.txt`: Version-locked agent manifest.
 
-Rust
+### 3. Documenting Architectural Intent & Contracts
+
+Document your modules and types using clean markdown or blockquote tags. `hh-docversion` parses them for agents in `llms.txt` while rendering styled callouts for human readers in Rustdoc:
+
+```rust
 //! # Stage 04: Tuos
 //! Double-entry transactional reconciliation engine.
 //!
@@ -73,9 +86,12 @@ Rust
 //!
 //! > **📝 NOTE**  
 //! > Replay integrity relies on uncorrupted cryptographic hash chains.
-docversion automatically extracts both your declared invariants and your code-level runtime assertions (assert!, ensure!, Err(...) returns) into a structured manifest:
 
-Markdown
+```
+
+`docversion` automatically extracts both your declared invariants and your code-level runtime assertions (`assert!`, `ensure!`, `Err(...)` returns) into a structured manifest:
+
+```markdown
 ### `struct JournalBatch`
 
 #### **Intent Directive**
@@ -88,51 +104,55 @@ Markdown
 #### **Programmatic Invariants & Rejection Boundaries**
 * 🔒 `assert_eq`: `debit_total == credit_total`
 * 🚫 Reject: `Err(HaraError::Validation("Zero-amount transaction rejected"))`
-4. Ingest External Docs (TypeDoc, VitePress, etc.)
-Bash
+
+```
+
+### 4. Ingest External Docs (TypeDoc, VitePress, etc.)
+
+```bash
 docversion build-site \
   --source docs/dist \
   --version 1.0.0 \
   --entry-page index.html \
   --out-dir public_site
-5. Verify Database Schema Contracts
-Bash
+
+```
+
+### 5. Verify Database Schema Contracts
+
+```bash
 docversion verify-db \
   --manifest schema_matrix.json \
   --schema core-ledger \
   --db-version 1 \
   --app-version 0.1.0
-Workspace Orchestration (cargo xtask)
-Automated workflows are managed through the internal xtask orchestrator:
 
-Bash
-# Fast CI check (check, workspace tests, doc-tests)
-cargo xtask ci
+```
 
-# Build documentation distribution bundle and LLM index
-cargo xtask docs --out-dir target/doc_site
+---
 
-# Validate schema contracts against local matrix
-cargo xtask verify-schema --schema core-ledger --db-version 1 --app-version 0.1.0
+## Developer Ergonomics: Git Hook Strategy
 
-# End-to-end local test run
-cargo xtask check-all
-Developer Ergonomics: Git Hook Strategy
-The repository includes a two-tiered .githooks/ suite optimized for high-velocity micro-commits:
+The repository includes a two-tiered `.githooks/` suite optimized for high-velocity micro-commits:
 
-pre-commit (Sub-second): Runs cargo check --workspace --quiet and JSON structure verification. Keeps micro-commits instant.
+* **pre-commit (Sub-second)**: Runs `cargo check --workspace --quiet` and JSON structure verification. Keeps micro-commits instant.
+* **pre-push (Gatekeeper)**: Runs `cargo test --workspace` and `cargo clippy --workspace --all-targets -- -D warnings` prior to branch pushes.
 
-pre-push (Gatekeeper): Runs full cargo xtask ci test suite prior to branch pushes.
+### Activate Hooks
 
-Activate Hooks
-Bash
+```bash
 git config core.hooksPath .githooks
 chmod +x .githooks/pre-commit .githooks/pre-push
-License & Stewardship
+
+```
+
+---
+
+## License & Stewardship
+
 Licensed under either of:
 
-Apache License, Version 2.0 (LICENSE-APACHE)
+* Apache License, Version 2.0 ([LICENSE-APACHE](https://www.google.com/search?q=LICENSE-APACHE))
+* MIT License ([LICENSE-MIT](https://www.google.com/search?q=LICENSE-MIT))
 
-MIT License (LICENSE-MIT)
-
-hh-docversion is open-sourced as community-maintained infrastructure. Contributions, issues, and discussions are welcome.
+`hh-docversion` is open-sourced as community-maintained infrastructure. Contributions, issues, and discussions are welcome.
