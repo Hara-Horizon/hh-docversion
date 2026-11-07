@@ -2,25 +2,27 @@ use clap::Parser;
 
 fn main() {
     let raw: Vec<String> = std::env::args().collect();
-    eprintln!("[docversion debug] Raw arguments: {:?}", raw);
 
-    let mut clean_args: Vec<String> = raw
-        .into_iter()
-        .skip(1)
-        .filter(|arg| arg != "docversion")
-        .collect();
+    // Cargo passes [".../cargo-docversion", "docversion", ...].
+    // Strip the binary name (arg 0) and the forwarded subcommand "docversion" (arg 1) if present.
+    let mut clean_args: Vec<String> = Vec::with_capacity(raw.len());
+    clean_args.push(raw.first().cloned().unwrap_or_else(|| "docversion".to_string()));
 
-    clean_args.insert(0, "docversion".to_string());
-    eprintln!(
-        "[docversion debug] Passing to DocversionCli: {:?}",
-        clean_args
-    );
+    let mut iter = raw.into_iter().skip(1);
+    if let Some(first) = iter.next() {
+        if first != "docversion" {
+            clean_args.push(first);
+        }
+    }
+    clean_args.extend(iter);
 
+    // try_parse_from returns clap::Error for --help and --version as well.
+    // e.exit() prints the text to stdout/stderr and exits with code 0 (for help/version)
+    // or code 2 / non-zero for actual syntax errors.
     let cli = match cargo_docversion::DocversionCli::try_parse_from(&clean_args) {
         Ok(c) => c,
         Err(e) => {
-            eprintln!("[docversion parse error]\n{}", e);
-            std::process::exit(1);
+            e.exit();
         }
     };
 
