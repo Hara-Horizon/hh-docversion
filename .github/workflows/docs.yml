@@ -1,0 +1,65 @@
+name: Deploy Versioned Documentation
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Checkout Existing gh-pages History
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          path: target/doc_site
+        continue-on-error: true
+
+      - name: Clean Git Metadata from Target
+        run: |
+          mkdir -p target/doc_site
+          rm -rf target/doc_site/.git
+
+      - name: Verify Schema Contracts
+        run: |
+          cargo run -p cargo-docversion --bin docversion -- check
+
+      - name: Build and Bundle Versioned Site
+        run: |
+          cargo run -p cargo-docversion --bin docversion -- site --out-dir target/doc_site
+
+      - name: Inspect versions.json Manifest
+        run: |
+          cat target/doc_site/versions.json
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./target/doc_site
+          keep_files: true
