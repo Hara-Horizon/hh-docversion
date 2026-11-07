@@ -129,7 +129,9 @@ impl SchemaMatrix {
     ) -> Result<(), ContractError> {
         let file = File::open(file_path.as_ref())?;
         let mut reader = BufReader::with_capacity(64 * 1024, file);
-        let mut writer = Sha256Writer { hasher: Sha256::new() };
+        let mut writer = Sha256Writer {
+            hasher: Sha256::new(),
+        };
 
         io::copy(&mut reader, &mut writer)?;
         let actual_hash = format!("{:x}", writer.hasher.finalize());
@@ -165,14 +167,23 @@ mod tests {
             }],
         };
 
-        assert!(matrix.verify_compatibility("1.5.0", "core-ledger", 4).is_ok());
-        assert!(matrix.verify_compatibility("2.1.0", "core-ledger", 4).is_err());
-        assert!(matrix.verify_compatibility("1.5.0", "core-ledger", 5).is_err());
+        assert!(matrix
+            .verify_compatibility("1.5.0", "core-ledger", 4)
+            .is_ok());
+        assert!(matrix
+            .verify_compatibility("2.1.0", "core-ledger", 4)
+            .is_err());
+        assert!(matrix
+            .verify_compatibility("1.5.0", "core-ledger", 5)
+            .is_err());
     }
 
     #[test]
     fn test_streaming_checksum_verification() {
-        let nanos = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
         let tmp_path = std::env::temp_dir().join(format!("docversion_stream_test_{}.bin", nanos));
 
         {

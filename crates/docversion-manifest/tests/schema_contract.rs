@@ -9,14 +9,16 @@ fn build_test_matrix() -> SchemaMatrix {
                 schema_version: 4,
                 supported_app_range: ">=1.4.0, <2.0.0".to_string(),
                 artifact_uri: "https://example.com/core-ledger-v4.sqlite".to_string(),
-                sha256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855".to_string(),
+                sha256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+                    .to_string(),
             },
             SchemaContract {
                 schema_id: "identity-vault".to_string(),
                 schema_version: 1,
                 supported_app_range: "^0.9.0".to_string(),
                 artifact_uri: "https://example.com/identity-v1.sqlite".to_string(),
-                sha256: "ca978112ca1bbdcafac231b39a23dc4da786eff8147c4e72b9807785afee48bb".to_string(),
+                sha256: "ca978112ca1bbdcafac231b39a23dc4da786eff8147c4e72b9807785afee48bb"
+                    .to_string(),
             },
         ],
     }

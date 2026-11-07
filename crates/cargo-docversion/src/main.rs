@@ -11,7 +11,10 @@ fn main() {
         .collect();
 
     clean_args.insert(0, "docversion".to_string());
-    eprintln!("[docversion debug] Passing to DocversionCli: {:?}", clean_args);
+    eprintln!(
+        "[docversion debug] Passing to DocversionCli: {:?}",
+        clean_args
+    );
 
     let cli = match cargo_docversion::DocversionCli::try_parse_from(&clean_args) {
         Ok(c) => c,

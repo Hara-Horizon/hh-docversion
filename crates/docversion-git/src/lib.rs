@@ -8,8 +8,7 @@ pub struct GitContext {
 
 impl GitContext {
     pub fn resolve<P: AsRef<Path>>(repo_path: P) -> Result<Self> {
-        let repo = gix::discover(repo_path.as_ref())
-            .context("Failed to locate Git repository")?;
+        let repo = gix::discover(repo_path.as_ref()).context("Failed to locate Git repository")?;
 
         let mut head = repo.head().context("Failed to resolve HEAD")?;
         let head_commit = head
@@ -28,16 +27,12 @@ impl GitContext {
 
 /// Checks whether the Git working tree has uncommitted changes.
 pub fn is_working_tree_dirty<P: AsRef<Path>>(repo_path: P) -> Result<bool> {
-    let repo = gix::discover(repo_path.as_ref())
-        .context("Failed to locate Git repository")?;
+    let repo = gix::discover(repo_path.as_ref()).context("Failed to locate Git repository")?;
     Ok(check_is_dirty(&repo))
 }
 
 /// Computes the revision string for the specified paths (e.g. "rev.1a2b3c4" or "rev.1a2b3c4+dirty").
-pub fn compute_doc_revision<P: AsRef<Path>>(
-    repo_path: P,
-    _paths: &[&str],
-) -> Result<String> {
+pub fn compute_doc_revision<P: AsRef<Path>>(repo_path: P, _paths: &[&str]) -> Result<String> {
     match GitContext::resolve(repo_path) {
         Ok(ctx) => {
             if ctx.is_dirty {

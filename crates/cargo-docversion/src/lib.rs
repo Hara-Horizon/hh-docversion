@@ -57,7 +57,12 @@ pub fn generate_markdown_summary(crate_name: &str, crate_root: &Path) -> Result<
     Ok(out)
 }
 
-fn scan_file(file_path: &Path, base_dir: &Path, out: &mut String, heading_level: usize) -> Result<()> {
+fn scan_file(
+    file_path: &Path,
+    base_dir: &Path,
+    out: &mut String,
+    heading_level: usize,
+) -> Result<()> {
     if !file_path.exists() {
         return Ok(());
     }
@@ -122,7 +127,11 @@ impl<'ast> Visit<'ast> for AssertionVisitor {
                 "assert" | "assert_eq" | "assert_ne" | "ensure" | "debug_assert"
             ) {
                 let tokens = node.mac.tokens.to_string();
-                let clean = tokens.split('\n').map(str::trim).collect::<Vec<_>>().join(" ");
+                let clean = tokens
+                    .split('\n')
+                    .map(str::trim)
+                    .collect::<Vec<_>>()
+                    .join(" ");
                 self.assertions.push(ExtractedAssertion {
                     kind: InvariantKind::Assert(name),
                     condition: clean,
@@ -167,7 +176,11 @@ fn match_err_call(call: &ExprCall) -> Option<String> {
         if let Some(seg) = p.path.segments.last() {
             if seg.ident == "Err" {
                 let tokens = quote::quote!(#call).to_string();
-                let clean = tokens.split('\n').map(str::trim).collect::<Vec<_>>().join(" ");
+                let clean = tokens
+                    .split('\n')
+                    .map(str::trim)
+                    .collect::<Vec<_>>()
+                    .join(" ");
                 return Some(clean);
             }
         }
@@ -210,12 +223,7 @@ pub fn format_assertions_markdown(
     out.push('\n');
 }
 
-fn process_item(
-    item: &Item,
-    base_dir: &Path,
-    out: &mut String,
-    level: usize,
-) -> Result<()> {
+fn process_item(item: &Item, base_dir: &Path, out: &mut String, level: usize) -> Result<()> {
     let hashes = "#".repeat(level.min(6));
 
     match item {
@@ -242,9 +250,19 @@ fn process_item(
                 let mod_file_dir = base_dir.join(ident.to_string()).join("mod.rs");
 
                 if mod_file_direct.exists() {
-                    scan_file(&mod_file_direct, &base_dir.join(ident.to_string()), out, level + 1)?;
+                    scan_file(
+                        &mod_file_direct,
+                        &base_dir.join(ident.to_string()),
+                        out,
+                        level + 1,
+                    )?;
                 } else if mod_file_dir.exists() {
-                    scan_file(&mod_file_dir, &base_dir.join(ident.to_string()), out, level + 1)?;
+                    scan_file(
+                        &mod_file_dir,
+                        &base_dir.join(ident.to_string()),
+                        out,
+                        level + 1,
+                    )?;
                 }
             }
         }
@@ -267,7 +285,8 @@ fn process_item(
                     out.push_str("**Fields:**\n\n");
                     for f in &named.named {
                         if let Visibility::Public(_) = f.vis {
-                            let f_name = f.ident.as_ref().map(|i| i.to_string()).unwrap_or_default();
+                            let f_name =
+                                f.ident.as_ref().map(|i| i.to_string()).unwrap_or_default();
                             let f_ty = quote::quote!(#f.ty).to_string();
                             let f_doc = extract_doc_comments(&f.attrs);
                             if f_doc.is_empty() {
@@ -980,13 +999,10 @@ fn execute_build_site(args: BuildSiteArgs) -> Result<()> {
     patch_distribution_versions(&latest_dir, &resolved_version)?;
 
     let redirect_target = format!("latest/{}/index.html", crate_ident);
-    let redirect_markup = generate_redirect_html(&redirect_target)
-        .context("Failed to generate redirect HTML")?;
+    let redirect_markup =
+        generate_redirect_html(&redirect_target).context("Failed to generate redirect HTML")?;
 
-    atomic_write(
-        args.out_dir.join("index.html"),
-        redirect_markup.as_bytes(),
-    )?;
+    atomic_write(args.out_dir.join("index.html"), redirect_markup.as_bytes())?;
 
     let git_rev = compute_doc_revision(".", &["src/", "docs/", "README.md"])
         .unwrap_or_else(|_| "rev.clean".to_string());
@@ -996,7 +1012,10 @@ fn execute_build_site(args: BuildSiteArgs) -> Result<()> {
 
     // 1. Root distribution level
     atomic_write(args.out_dir.join("llms.txt"), markdown_summary.as_bytes())?;
-    atomic_write(args.out_dir.join("api-reference.md"), markdown_summary.as_bytes())?;
+    atomic_write(
+        args.out_dir.join("api-reference.md"),
+        markdown_summary.as_bytes(),
+    )?;
 
     // 2. Versioned directory level (e.g. target/doc_site/v0.2.0/llms.txt)
     atomic_write(version_dir.join("llms.txt"), markdown_summary.as_bytes())?;
@@ -1059,20 +1078,43 @@ fn patch_distribution_versions(dir: &Path, target_version: &str) -> Result<()> {
         let p = entry.path();
         if p.is_dir() {
             patch_distribution_versions(&p, target_version)?;
-        } else if p.extension().is_some_and(|ext| ext == "html" || ext == "js") {
+        } else if p
+            .extension()
+            .is_some_and(|ext| ext == "html" || ext == "js")
+        {
             if let Ok(content) = fs::read_to_string(&p) {
                 let mut updated = content.clone();
 
                 // 1. Topbar dropdown default option label
-                updated = replace_delimited(&updated, r#"class="hh-active-ver-label">"#, "</option>", &format!("v{}", target_version));
+                updated = replace_delimited(
+                    &updated,
+                    r#"class="hh-active-ver-label">"#,
+                    "</option>",
+                    &format!("v{}", target_version),
+                );
 
                 // 2. Rustdoc sidebar crate version
-                updated = replace_delimited(&updated, r#"<span class="version">"#, "</span>", target_version);
+                updated = replace_delimited(
+                    &updated,
+                    r#"<span class="version">"#,
+                    "</span>",
+                    target_version,
+                );
                 updated = replace_delimited(&updated, r#"class="version">"#, "</", target_version);
-                updated = replace_delimited(&updated, r#"<div class="version">"#, "</div>", target_version);
+                updated = replace_delimited(
+                    &updated,
+                    r#"<div class="version">"#,
+                    "</div>",
+                    target_version,
+                );
 
                 // 3. Obsolete badges
-                updated = replace_delimited(&updated, r#"<span>cargo-docversion v"#, "</span>", &format!("{}</span>", target_version));
+                updated = replace_delimited(
+                    &updated,
+                    r#"<span>cargo-docversion v"#,
+                    "</span>",
+                    &format!("{}</span>", target_version),
+                );
 
                 if updated != content {
                     let _ = fs::write(&p, updated);
@@ -1116,12 +1158,13 @@ fn execute_verify_db(args: VerifyDbArgs) -> Result<()> {
     let raw = fs::read(manifest_path)
         .with_context(|| format!("Failed to read manifest file: {}", manifest_path.display()))?;
 
-    let matrix = SchemaMatrix::from_json_slice(&raw)
-        .context("Malformed schema matrix JSON manifest")?;
+    let matrix =
+        SchemaMatrix::from_json_slice(&raw).context("Malformed schema matrix JSON manifest")?;
 
     let metadata = MetadataCommand::new().exec().ok();
     let root_pkg = metadata.as_ref().and_then(|m| {
-        m.root_package().or_else(|| m.workspace_packages().first().copied())
+        m.root_package()
+            .or_else(|| m.workspace_packages().first().copied())
     });
 
     let app_ver_str = match args.app_version {
@@ -1134,7 +1177,11 @@ fn execute_verify_db(args: VerifyDbArgs) -> Result<()> {
     let schema_key = match args.schema {
         Some(s) => s,
         None => {
-            let mut available: Vec<String> = matrix.contracts.iter().map(|c| c.schema_id.clone()).collect();
+            let mut available: Vec<String> = matrix
+                .contracts
+                .iter()
+                .map(|c| c.schema_id.clone())
+                .collect();
             available.sort();
             available.dedup();
             if available.is_empty() {
