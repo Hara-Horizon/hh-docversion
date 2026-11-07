@@ -24,9 +24,9 @@ name = "docversion"
 path = "src/bin/docversion.rs"
 
 [dependencies]
-docversion-core = { path = "../docversion-core" }
-docversion-git = { path = "../docversion-git" }
-docversion-manifest = { path = "../docversion-manifest" }
+docversion-core.workspace = true
+docversion-git.workspace = true
+docversion-manifest.workspace = true
 cargo_metadata.workspace = true
 clap.workspace = true
 anyhow.workspace = true

@@ -11,9 +11,9 @@ resolver = "2"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.78"
-authors = ["Docversion Contributors"]
+authors = ["Hara Horizon Software Systems Inc."]
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/example/docversion"
+repository = "https://github.com/Hara-Horizon/hh-docversion"
 homepage = "https://harahorizon.com"
 
 [workspace.dependencies]
@@ -28,3 +28,8 @@ semver = { version = "1.0", features = ["serde"] }
 sha2 = "0.10"
 syn = { version = "2.0", features = ["full", "visit", "extra-traits"] }
 thiserror = "1.0"
+
+# Declare internal workspace crates here so children can inherit them cleanly:
+docversion-core = { version = "0.1.0", path = "crates/docversion-core" }
+docversion-git = { version = "0.1.0", path = "crates/docversion-git" }
+docversion-manifest = { version = "0.1.0", path = "crates/docversion-manifest" }

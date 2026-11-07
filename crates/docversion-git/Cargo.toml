@@ -9,7 +9,7 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-docversion-core = { path = "../docversion-core", version = "0.1.0" }
+docversion-core.workspace = true
 gix = { version = "0.66", default-features = false, features = ["blob-diff", "revision"] }
 anyhow = { workspace = true }
 thiserror = { workspace = true }
