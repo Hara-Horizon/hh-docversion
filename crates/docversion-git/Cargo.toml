@@ -10,7 +10,7 @@ repository.workspace = true
 
 [dependencies]
 docversion-core.workspace = true
-gix = { version = "0.66", default-features = false, features = ["blob-diff", "revision"] }
+gix = { version = "0.73", default-features = false, features = ["blob-diff", "revision"] }
 anyhow = { workspace = true }
 thiserror = { workspace = true }
 
