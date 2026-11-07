@@ -1,0 +1,26 @@
+# Rust build artifacts
+target/
+**/*.rs.bk
+Cargo.lock
+
+# Temporary build-time injected banners and manifests
+target/docversion/
+staging/
+
+# Editor and OS caches
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Profiling and test coverage outputs
+*.profraw
+*.profdata
+lcov.info
+
+# Environment and local overrides
+.env
+.env.*
+!.env.example
