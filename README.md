@@ -40,7 +40,7 @@ rustup update stable
 Install the latest release directly from GitHub into `~/.cargo/bin`:
 
 ```bash
-cargo install --git [https://github.com/Hara-Horizon/hh-docversion.git](https://github.com/Hara-Horizon/hh-docversion.git) cargo-docversion --locked
+cargo install --git [https://github.com/Hara-Horizon/hh-docversion.git](https://github.com/Hara-Horizon/hh-docversion.git) cargo-docversion
 
 ```
 
@@ -48,10 +48,10 @@ To pin to a specific release tag or commit SHA for reproducible CI pipelines:
 
 ```bash
 # Pin to a tagged release
-cargo install --git [https://github.com/Hara-Horizon/hh-docversion.git](https://github.com/Hara-Horizon/hh-docversion.git) --tag v0.1.0 cargo-docversion --locked
+cargo install --git [https://github.com/Hara-Horizon/hh-docversion.git](https://github.com/Hara-Horizon/hh-docversion.git) --tag v0.1.0 cargo-docversion
 
 # Pin to a specific commit SHA
-cargo install --git [https://github.com/Hara-Horizon/hh-docversion.git](https://github.com/Hara-Horizon/hh-docversion.git) --rev <COMMIT_SHA> cargo-docversion --locked
+cargo install --git [https://github.com/Hara-Horizon/hh-docversion.git](https://github.com/Hara-Horizon/hh-docversion.git) --rev <COMMIT_SHA> cargo-docversion
 
 ```
 
@@ -60,7 +60,7 @@ cargo install --git [https://github.com/Hara-Horizon/hh-docversion.git](https://
 If you have cloned the repository locally:
 
 ```bash
-cargo install --path crates/cargo-docversion --force --locked
+cargo install --path crates/cargo-docversion --force
 
 ```
 
