@@ -1,7 +1,7 @@
 # hh-docversion
 
 [![CI](https://github.com/Hara-Horizon/hh-docversion/actions/workflows/ci.yml/badge.svg)](https://github.com/Hara-Horizon/hh-docversion/actions/workflows/ci.yml)
-[![Security Audit](https://github.com/Hara-Horizon/hh-docversion/actions/workflows/ci.yml/badge.svg?job=security_audit)](https://github.com/Hara-Horizon/hh-docversion/actions/workflows/ci.yml)
+[![Security Audit](https://github.com/Hara-Horizon/hh-docversion/actions/workflows/audit.yml/badge.svg)](https://github.com/Hara-Horizon/hh-docversion/actions/workflows/audit.yml)
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/License-MIT%20OR%20Apache--2.0-blue.svg)](LICENSE-MIT)
 [![Telemetry](https://img.shields.io/badge/telemetry-zero-brightgreen.svg)](#zero-telemetry)
 [![Rust](https://img.shields.io/badge/rust-1.78%2B-orange.svg)](Cargo.toml)
