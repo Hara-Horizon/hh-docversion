@@ -99,6 +99,12 @@ pub struct AssertionVisitor {
     pub assertions: Vec<ExtractedAssertion>,
 }
 
+impl Default for AssertionVisitor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AssertionVisitor {
     pub fn new() -> Self {
         Self {
@@ -1053,7 +1059,7 @@ fn patch_distribution_versions(dir: &Path, target_version: &str) -> Result<()> {
         let p = entry.path();
         if p.is_dir() {
             patch_distribution_versions(&p, target_version)?;
-        } else if p.extension().map_or(false, |ext| ext == "html" || ext == "js") {
+        } else if p.extension().is_some_and(|ext| ext == "html" || ext == "js") {
             if let Ok(content) = fs::read_to_string(&p) {
                 let mut updated = content.clone();
 
@@ -1217,13 +1223,13 @@ fn parse_intent_contract(doc_text: &str) -> IntentContract {
     for line in doc_text.lines() {
         let clean = line
             .trim()
-            .trim_start_matches(|c| c == '>' || c == '#' || c == '*' || c == '-' || c == ' ')
+            .trim_start_matches(['>', '#', '*', '-', ' '])
             .trim();
         let lower = clean.to_lowercase();
 
         if lower.starts_with("intent") {
             let desc = clean["intent".len()..]
-                .trim_start_matches(|c| c == ':' || c == '*' || c == ' ')
+                .trim_start_matches([':', '*', ' '])
                 .trim();
             if !desc.is_empty() {
                 contract.intent = Some(desc.to_string());
