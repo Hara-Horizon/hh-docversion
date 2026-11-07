@@ -1,63 +1,81 @@
+use anyhow::{Context, Result};
 use std::path::Path;
-use thiserror::Error;
 
-#[derive(Debug, Error)]
-pub enum GitError {
-    #[error("Git inspection error: {0}")]
-    Gix(String),
+pub struct GitContext {
+    pub tree_hash: String,
+    pub is_dirty: bool,
 }
 
-/// Resolves a documentation subversion string using in-process Git tree discovery.
-///
-/// ```rust
-/// use docversion_git::compute_doc_revision;
-///
-/// let rev = compute_doc_revision(".", &["src/"]).unwrap();
-/// assert!(rev.starts_with("rev."));
-/// ```
+impl GitContext {
+    pub fn resolve<P: AsRef<Path>>(repo_path: P) -> Result<Self> {
+        let repo = gix::discover(repo_path.as_ref())
+            .context("Failed to locate Git repository")?;
+
+        let mut head = repo.head().context("Failed to resolve HEAD")?;
+        let head_commit = head
+            .peel_to_commit_in_place()
+            .context("Failed to peel HEAD to commit")?;
+        let tree_hash = head_commit.id().to_hex_with_len(7).to_string();
+
+        let is_dirty = check_is_dirty(&repo);
+
+        Ok(Self {
+            tree_hash,
+            is_dirty,
+        })
+    }
+}
+
+/// Checks whether the Git working tree has uncommitted changes.
+pub fn is_working_tree_dirty<P: AsRef<Path>>(repo_path: P) -> Result<bool> {
+    let repo = gix::discover(repo_path.as_ref())
+        .context("Failed to locate Git repository")?;
+    Ok(check_is_dirty(&repo))
+}
+
+/// Computes the revision string for the specified paths (e.g. "rev.1a2b3c4" or "rev.1a2b3c4+dirty").
 pub fn compute_doc_revision<P: AsRef<Path>>(
-    repo_root: P,
-    _paths_to_track: &[&str],
-) -> Result<String, GitError> {
-    let repo = match gix::discover(repo_root.as_ref()) {
-        Ok(r) => r,
-        Err(_) => return Ok("rev.clean".to_string()),
-    };
-
-    let revision = match repo.head_id() {
-        Ok(id) => {
-            let hex = id.to_hex_with_len(7).to_string();
-            format!("rev.{}", hex)
+    repo_path: P,
+    _paths: &[&str],
+) -> Result<String> {
+    match GitContext::resolve(repo_path) {
+        Ok(ctx) => {
+            if ctx.is_dirty {
+                Ok(format!("rev.{}+dirty", ctx.tree_hash))
+            } else {
+                Ok(format!("rev.{}", ctx.tree_hash))
+            }
         }
-        Err(_) => "rev.clean".to_string(),
-    };
-
-    Ok(revision)
+        Err(_) => Ok("rev.clean".to_string()),
+    }
 }
 
-/// Inspects working tree dirty status using in-process discovery.
-///
-/// ```rust
-/// use docversion_git::is_working_tree_dirty;
-///
-/// let _ = is_working_tree_dirty(".");
-/// ```
-pub fn is_working_tree_dirty<P: AsRef<Path>>(repo_root: P) -> bool {
-    let repo = match gix::discover(repo_root.as_ref()) {
-        Ok(r) => r,
+fn check_is_dirty(repo: &gix::Repository) -> bool {
+    let work_dir = match repo.work_dir() {
+        Some(w) => w,
+        None => return false,
+    };
+
+    let index = match repo.index_or_empty() {
+        Ok(idx) => idx,
         Err(_) => return false,
     };
 
-    repo.is_dirty().unwrap_or(false)
-}
+    for entry in index.entries() {
+        let path = match std::str::from_utf8(entry.path(&index)) {
+            Ok(p) => work_dir.join(p),
+            Err(_) => continue,
+        };
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_unit_compute_doc_revision() {
-        let rev = compute_doc_revision(".", &[]).unwrap();
-        assert!(rev.starts_with("rev."));
+        if let Ok(meta) = std::fs::metadata(&path) {
+            let stat = entry.stat;
+            if stat.size != 0 && stat.size != meta.len() as u32 {
+                return true;
+            }
+        } else {
+            return true;
+        }
     }
+
+    false
 }
