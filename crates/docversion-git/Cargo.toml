@@ -13,3 +13,6 @@ docversion-core.workspace = true
 gix = { version = "0.66", default-features = false, features = ["blob-diff", "revision"] }
 anyhow = { workspace = true }
 thiserror = { workspace = true }
+
+[badges]
+maintenance = { status = "passively-maintained" }

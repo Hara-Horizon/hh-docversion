@@ -35,3 +35,6 @@ serde_json.workspace = true
 semver.workspace = true
 syn = { workspace = true, features = ["full", "visit", "extra-traits"] }
 quote.workspace = true
+
+[badges]
+maintenance = { status = "passively-maintained" }
