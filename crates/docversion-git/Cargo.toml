@@ -1,0 +1,17 @@
+[package]
+name = "docversion-git"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Deterministic, in-process Git tree and revision inspector for docversion."
+documentation = "https://docs.rs/docversion-git"
+keywords = ["git", "versioning", "docs", "automation"]
+categories = ["development-tools::cargo-plugins"]
+
+[dependencies]
+docversion-core = { path = "../docversion-core" }
+gix = { version = "0.66", default-features = false, features = ["status", "revision"] }
+thiserror.workspace = true

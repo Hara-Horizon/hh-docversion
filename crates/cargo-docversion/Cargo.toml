@@ -1,0 +1,34 @@
+[package]
+name = "cargo-docversion"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Universal version-aware documentation site bundler and DB schema matrix contract verifier."
+documentation = "https://docs.rs/cargo-docversion"
+keywords = ["cargo", "plugin", "documentation", "versioning", "schema"]
+categories = ["command-line-utilities", "development-tools::cargo-plugins"]
+
+[lib]
+name = "cargo_docversion"
+path = "src/lib.rs"
+
+[[bin]]
+name = "cargo-docversion"
+path = "src/main.rs"
+
+[[bin]]
+name = "docversion"
+path = "src/bin/docversion.rs"
+
+[dependencies]
+docversion-core = { path = "../docversion-core" }
+docversion-git = { path = "../docversion-git" }
+docversion-manifest = { path = "../docversion-manifest" }
+cargo_metadata.workspace = true
+clap.workspace = true
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
