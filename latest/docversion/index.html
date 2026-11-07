@@ -1,0 +1,306 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="API documentation for the Rust `docversion` crate."><title>docversion - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../static.files/rustdoc-0c87338a.css"><script id="default-settings" 
+data-use_system_theme="false"
+data-theme="ayu"></script><meta name="rustdoc-vars" data-root-path="../" data-static-root-path="../static.files/" data-current-crate="docversion" data-themes="" data-resource-suffix="" data-rustdoc-version="1.99.1 (58cf8f9c3 2026-10-13)" data-channel="1.99.1" data-search-js="search-cf4fc35e.js" data-stringdex-js="stringdex-b5109af9.js" data-settings-js="settings-170eb4bf.js" ><script src="../static.files/storage-41dd4d93.js"></script><script defer src="../crates.js"></script><script defer src="../static.files/main-417ebf0a.js"></script><noscript><link rel="stylesheet" href="../static.files/noscript-9f56287d.css"></noscript><link rel="alternate icon" type="image/png" href="../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../static.files/favicon-044be391.svg"><script>
+(function() {
+  // Pre-seed theme to ayu
+  try {
+    var theme = localStorage.getItem('rustdoc-theme');
+    var useSystem = localStorage.getItem('rustdoc-use-system-theme');
+    if (!theme || useSystem === 'true' || theme === 'dark') {
+      localStorage.setItem('rustdoc-theme', 'ayu');
+      localStorage.setItem('rustdoc-use-system-theme', 'false');
+      document.documentElement.setAttribute('data-theme', 'ayu');
+    }
+  } catch(e) {}
+
+  function syncRustdocControls() {
+    // 1. Hide unwanted theme radio items in settings
+    var hideRadios = ['dark', 'system preference'];
+    hideRadios.forEach(function(val) {
+      var r = document.querySelector('input[name="theme"][value="' + val + '"]');
+      if (r) {
+        var p = r.closest('label') || r.parentElement;
+        if (p) p.style.setProperty('display', 'none', 'important');
+      }
+    });
+
+    // 2. Hide sub-theme choices
+    var subSelectors = [
+      '#preferred-light-theme',
+      '#preferred-dark-theme',
+      '.theme-sub-choices',
+      '#theme-system-preference',
+      'label[for="theme-system-preference"]'
+    ];
+    subSelectors.forEach(function(sel) {
+      document.querySelectorAll(sel).forEach(function(el) {
+        el.style.setProperty('display', 'none', 'important');
+      });
+    });
+
+    // 3. Re-label ayu as dark in settings text
+    var ayuRadio = document.querySelector('input[name="theme"][value="ayu"]');
+    if (ayuRadio) {
+      var label = document.querySelector('label[for="' + ayuRadio.id + '"]') || ayuRadio.closest('label') || ayuRadio.parentElement;
+      if (label) {
+        for (var i = 0; i < label.childNodes.length; i++) {
+          var node = label.childNodes[i];
+          if (node.nodeType === Node.TEXT_NODE && node.textContent.indexOf('ayu') !== -1) {
+            node.textContent = node.textContent.replace('ayu', 'dark');
+          }
+        }
+      }
+    }
+
+    // 4. Hide toggle-all-docs if page has no collapsible sections
+    var hasToggles = document.querySelector('details.toggle') !== null;
+    var toggleBtn = document.getElementById('toggle-all-docs');
+    if (toggleBtn) {
+      if (!hasToggles) {
+        toggleBtn.style.setProperty('display', 'none', 'important');
+      } else {
+        toggleBtn.style.removeProperty('display');
+      }
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', syncRustdocControls);
+  var observer = new MutationObserver(syncRustdocControls);
+  observer.observe(document.documentElement, { childList: true, subtree: true });
+})();
+</script>
+<style>
+  /* Settings styling: Hide redundant themes */
+  input[name="theme"][value="system preference"],
+  label:has(input[value="system preference"]),
+  label[for*="system-preference"],
+  input[name="theme"][value="dark"],
+  label:has(input[name="theme"][value="dark"]),
+  label[for="theme-dark"],
+  #preferred-light-theme,
+  #preferred-dark-theme,
+  .theme-sub-choices {
+    display: none !important;
+  }
+
+  /* FLIP RUSTDOC SUMMARY / SHOW ALL ICON DIRECTLY ON ::before */
+  #toggle-all-docs::before {
+    display: inline-block !important;
+    transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    transform-origin: center center !important;
+  }
+
+  /* When collapsed (Show all), rustdoc applies .will-expand: rotate 180deg */
+  #toggle-all-docs.will-expand::before {
+    transform: rotate(180deg) !important;
+  }
+
+  /* Obsidian callout block styling for human-facing markdown docs */
+  .docblock blockquote {
+    border-left: 3px solid #ffb454 !important;
+    background: rgba(255, 180, 84, 0.04) !important;
+    padding: 8px 14px !important;
+    border-radius: 2px !important;
+  }
+</style>
+</head><body class="rustdoc mod crate"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><!-- OBSIDIAN AYU TOPBAR -->
+<style>
+  :root {
+    --hh-bg: #0f141c;
+    --hh-border: #1e2430;
+    --hh-fg: #cbccc6;
+    --hh-subfg: #707a8c;
+    --hh-pill-bg: #141925;
+    --hh-pill-border: #283040;
+  }
+
+  :root[data-theme="light"], body.light {
+    --hh-bg: #191e28;
+    --hh-border: #2d3648;
+    --hh-fg: #e6e8ee;
+    --hh-subfg: #8a94a8;
+    --hh-pill-bg: #222938;
+    --hh-pill-border: #3b465c;
+  }
+
+  html {
+    scroll-padding-top: 40px;
+  }
+
+  body {
+    padding-top: 40px !important;
+  }
+
+  nav.sidebar, .sidebar {
+    top: 40px !important;
+    height: calc(100vh - 40px) !important;
+  }
+
+  #hh-obsidian-topbar {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100vw !important;
+    height: 40px !important;
+    background: var(--hh-bg) !important;
+    border-bottom: 0.75px solid var(--hh-border) !important;
+    color: var(--hh-fg) !important;
+    font-family: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace !important;
+    font-size: 13px !important;
+    letter-spacing: 0.03em !important;
+    z-index: 2147483647 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    padding: 0 16px !important;
+    box-sizing: border-box !important;
+    user-select: none !important;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.45) !important;
+  }
+
+  #hh-obsidian-topbar * {
+    box-sizing: border-box !important;
+  }
+
+  .hh-accent {
+    color: var(--hh-fg);
+    font-weight: 600;
+  }
+
+  .hh-tag {
+    color: var(--hh-subfg);
+  }
+
+  .hh-select-wrapper {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+  }
+
+  #hh-version-select {
+    appearance: none;
+    -webkit-appearance: none;
+    background: var(--hh-pill-bg);
+    color: var(--hh-fg);
+    border: 0.75px solid var(--hh-pill-border);
+    border-radius: 3px;
+    padding: 4px 26px 4px 10px;
+    font-family: inherit;
+    font-size: 12.5px;
+    cursor: pointer;
+    outline: none;
+    transition: border-color 0.15s ease, background 0.15s ease;
+  }
+
+  #hh-version-select:hover {
+    border-color: #ffb454;
+  }
+
+  .hh-select-arrow {
+    position: absolute;
+    right: 8px;
+    pointer-events: none;
+    font-size: 8px;
+    color: var(--hh-subfg);
+  }
+
+  .hh-pill {
+    display: inline-flex;
+    align-items: center;
+    background: var(--hh-pill-bg);
+    border: 0.75px solid var(--hh-pill-border);
+    border-radius: 3px;
+    padding: 4px 10px;
+    gap: 8px;
+  }
+
+  .hh-status-indicator {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #7fd962;
+    box-shadow: 0 0 6px rgba(127, 217, 98, 0.6);
+  }
+</style>
+
+<div id="hh-obsidian-topbar">
+  <div style="display:flex; align-items:center; gap:16px;">
+    <span class="hh-pill">
+      <span class="hh-status-indicator"></span>
+      <span class="hh-accent">cargo-docversion</span>
+    </span>
+    <div class="hh-select-wrapper">
+      <select id="hh-version-select" aria-label="Documentation Version">
+        <option value="" selected class="hh-active-ver-label">v0.1.0</option>
+      </select>
+      <span class="hh-select-arrow">▼</span>
+    </div>
+  </div>
+
+  <div style="display:flex; align-items:center;">
+    <span class="hh-tag">[REV: <span style="color:var(--hh-fg);">rev.7e17e81</span>]</span>
+  </div>
+</div>
+
+<script>
+(function() {
+  const select = document.getElementById('hh-version-select');
+  if (!select) return;
+
+  const currentPath = window.location.pathname;
+  let rootOffset = '';
+  const match = currentPath.match(/(.*?\/(?:v\d+\.\d+\.\d+|latest)\/)/);
+  if (match) {
+    const prefix = match[1];
+    const rest = currentPath.substring(prefix.length);
+    const depth = (rest.match(/\//g) || []).length;
+    rootOffset = '../'.repeat(depth + 1);
+  } else {
+    rootOffset = './';
+  }
+
+  fetch(rootOffset + 'versions.json')
+    .then(r => {
+      if (!r.ok) throw new Error();
+      return r.json();
+    })
+    .then(data => {
+      if (!data || !Array.isArray(data.versions)) return;
+      select.innerHTML = '';
+
+      const latestOption = document.createElement('option');
+      latestOption.value = rootOffset + 'latest/';
+      latestOption.textContent = 'latest (v' + data.latest + ')';
+      select.appendChild(latestOption);
+
+      data.versions.forEach(v => {
+        const opt = document.createElement('option');
+        opt.value = rootOffset + v.path;
+        opt.textContent = 'v' + v.version;
+        select.appendChild(opt);
+      });
+
+      for (let i = 0; i < select.options.length; i++) {
+        const optVal = select.options[i].value;
+        const normalized = optVal.replace(/^(\.\.\/)+/, '');
+        if (currentPath.includes('/' + normalized)) {
+          select.selectedIndex = i;
+          break;
+        }
+      }
+    })
+    .catch(() => {});
+
+  select.addEventListener('change', function() {
+    const targetBase = this.value;
+    if (!targetBase) return;
+    if (match) {
+      const subpath = currentPath.substring(match[1].length);
+      window.location.href = targetBase + subpath;
+    } else {
+      window.location.href = targetBase;
+    }
+  });
+})();
+</script>
+<rustdoc-topbar><h2><a href="#">Crate docversion</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../docversion/index.html">docversion</a><span class="version">0.1.0</span></h2></div><div class="sidebar-elems"><ul class="block"><li><a id="all-types" href="all.html">All Items</a></li></ul><section id="rustdoc-toc"><h3><a href="#functions">Crate Items</a></h3><ul class="block"><li><a href="#functions" title="Functions">Functions</a></li></ul></section><div id="rustdoc-modnav"></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1>Crate <span>docversion</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../src/docversion/docversion.rs.html#1-8">Source</a> </span></div><h2 id="functions" class="section-header">Functions<a href="#functions" class="anchor">§</a></h2><dl class="item-table"><dt><a class="fn" href="fn.main.html" title="fn docversion::main">main</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt></dl></section></div></main></body></html>

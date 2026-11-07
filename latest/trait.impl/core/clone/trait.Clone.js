@@ -1,0 +1,9 @@
+(function() {
+    const implementors = Object.fromEntries([["cargo_docversion",[["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.99.1/core/clone/trait.Clone.html\" title=\"trait core::clone::Clone\">Clone</a> for <a class=\"struct\" href=\"cargo_docversion/struct.ExtractedAssertion.html\" title=\"struct cargo_docversion::ExtractedAssertion\">ExtractedAssertion</a>",0],["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.99.1/core/clone/trait.Clone.html\" title=\"trait core::clone::Clone\">Clone</a> for <a class=\"enum\" href=\"cargo_docversion/enum.InvariantKind.html\" title=\"enum cargo_docversion::InvariantKind\">InvariantKind</a>",0]]],["docversion_core",[["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.99.1/core/clone/trait.Clone.html\" title=\"trait core::clone::Clone\">Clone</a> for <a class=\"struct\" href=\"docversion_core/struct.VersionIdentifier.html\" title=\"struct docversion_core::VersionIdentifier\">VersionIdentifier</a>",0]]],["docversion_manifest",[["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.99.1/core/clone/trait.Clone.html\" title=\"trait core::clone::Clone\">Clone</a> for <a class=\"struct\" href=\"docversion_manifest/struct.SchemaContract.html\" title=\"struct docversion_manifest::SchemaContract\">SchemaContract</a>",0],["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.99.1/core/clone/trait.Clone.html\" title=\"trait core::clone::Clone\">Clone</a> for <a class=\"struct\" href=\"docversion_manifest/struct.SchemaMatrix.html\" title=\"struct docversion_manifest::SchemaMatrix\">SchemaMatrix</a>",0]]]]);
+    if (window.register_implementors) {
+        window.register_implementors(implementors);
+    } else {
+        window.pending_implementors = implementors;
+    }
+})()
+//{"start":59,"fragment_lengths":[607,320,614]}

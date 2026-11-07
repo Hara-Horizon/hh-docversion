@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["CargoSubcommands","Commands","InvariantKind"],"fn":["format_assertions_markdown","generate_markdown_summary","run_cargo_plugin","run_cli"],"struct":["AssertionVisitor","BuildSiteArgs","CargoCli","DocArgs","DocversionCli","ExtractedAssertion","SiteArgs","VerifyDbArgs"]};
