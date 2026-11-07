@@ -238,7 +238,7 @@ data-theme="ayu"></script><meta name="rustdoc-vars" data-root-path="../" data-st
   </div>
 
   <div style="display:flex; align-items:center;">
-    <span class="hh-tag">[REV: <span style="color:var(--hh-fg);">rev.7e17e81</span>]</span>
+    <span class="hh-tag">[REV: <span style="color:var(--hh-fg);">rev.dce377d</span>]</span>
   </div>
 </div>
 
@@ -303,7 +303,7 @@ data-theme="ayu"></script><meta name="rustdoc-vars" data-root-path="../" data-st
   });
 })();
 </script>
-<rustdoc-topbar><h2><a href="#">compute_doc_revision</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../docversion_git/index.html">docversion_<wbr>git</a><span class="version">0.1.0</span></h2></div><div class="sidebar-elems"><div id="rustdoc-modnav"></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="index.html">docversion_git</a></div><h1>Function <span class="fn">compute_<wbr>doc_<wbr>revision</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../src/docversion_git/lib.rs.html#37-51">Source</a> </span></div><pre class="rust item-decl"><code>pub fn compute_doc_revision&lt;P: <a class="trait" href="https://doc.rust-lang.org/1.99.1/core/convert/trait.AsRef.html" title="trait core::convert::AsRef">AsRef</a>&lt;<a class="struct" href="https://doc.rust-lang.org/1.99.1/std/path/struct.Path.html" title="struct std::path::Path">Path</a>&gt;&gt;(
+<rustdoc-topbar><h2><a href="#">compute_doc_revision</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../docversion_git/index.html">docversion_<wbr>git</a><span class="version">0.1.0</span></h2></div><div class="sidebar-elems"><div id="rustdoc-modnav"></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="index.html">docversion_git</a></div><h1>Function <span class="fn">compute_<wbr>doc_<wbr>revision</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../src/docversion_git/lib.rs.html#35-46">Source</a> </span></div><pre class="rust item-decl"><code>pub fn compute_doc_revision&lt;P: <a class="trait" href="https://doc.rust-lang.org/1.99.1/core/convert/trait.AsRef.html" title="trait core::convert::AsRef">AsRef</a>&lt;<a class="struct" href="https://doc.rust-lang.org/1.99.1/std/path/struct.Path.html" title="struct std::path::Path">Path</a>&gt;&gt;(
     repo_path: P,
     _paths: &amp;[&amp;<a class="primitive" href="https://doc.rust-lang.org/1.99.1/std/primitive.str.html">str</a>],
 ) -&gt; <a class="type" href="https://docs.rs/anyhow/1.0.104/anyhow/type.Result.html" title="type anyhow::Result">Result</a>&lt;<a class="struct" href="https://doc.rust-lang.org/1.99.1/alloc/string/struct.String.html" title="struct alloc::string::String">String</a>&gt;</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Computes the revision string for the specified paths (e.g. “rev.1a2b3c4” or “rev.1a2b3c4+dirty”).</p>
