@@ -1,19 +1,18 @@
 [package]
 name = "docversion-manifest"
+description = "Schema compatibility matrix parser and contract assertions for hh-docversion"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Deterministic database schema compatibility matrix parser and contract verifier."
-documentation = "https://docs.rs/docversion-manifest"
-keywords = ["schema", "database", "semver", "contracts"]
-categories = ["database", "development-tools"]
 
 [dependencies]
-serde.workspace = true
-serde_json.workspace = true
-semver.workspace = true
-thiserror.workspace = true
-sha2 = "0.10"
+docversion-core = { path = "../docversion-core", version = "0.1.0" }
+sha2 = { workspace = true }
+semver = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
