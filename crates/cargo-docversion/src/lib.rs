@@ -10,6 +10,389 @@ use docversion_git::compute_doc_revision;
 use docversion_manifest::SchemaMatrix;
 use serde::{Deserialize, Serialize};
 
+use syn::visit::{self, Visit};
+use syn::{
+    Expr, ExprCall, ExprMacro, ExprReturn, Fields, ImplItem, Item, ItemEnum, ItemFn, ItemImpl,
+    ItemMod, ItemStruct, ItemTrait, Visibility,
+};
+
+/// Extracts doc comments (`///` or `//!`) from attributes.
+fn extract_doc_comments(attrs: &[syn::Attribute]) -> String {
+    let mut docs = Vec::new();
+    for attr in attrs {
+        if attr.path().is_ident("doc") {
+            if let syn::Meta::NameValue(nv) = &attr.meta {
+                if let syn::Expr::Lit(syn::ExprLit {
+                    lit: syn::Lit::Str(s),
+                    ..
+                }) = &nv.value
+                {
+                    docs.push(s.value().trim().to_string());
+                }
+            }
+        }
+    }
+    docs.join("\n")
+}
+
+/// Recursively scans Rust source files and renders public interfaces to Markdown.
+pub fn generate_markdown_summary(crate_name: &str, crate_root: &Path) -> Result<String> {
+    let mut out = String::new();
+    out.push_str(&format!("# {}\n\n", crate_name));
+    out.push_str("> Autonomous Agent API Context & Single-File Documentation Index\n\n");
+
+    let src_dir = crate_root.join("src");
+    let lib_rs = src_dir.join("lib.rs");
+    let main_rs = src_dir.join("main.rs");
+
+    let entry_file = if lib_rs.exists() {
+        lib_rs
+    } else if main_rs.exists() {
+        main_rs
+    } else {
+        return Ok(out);
+    };
+
+    scan_file(&entry_file, &src_dir, &mut out, 2)?;
+    Ok(out)
+}
+
+fn scan_file(file_path: &Path, base_dir: &Path, out: &mut String, heading_level: usize) -> Result<()> {
+    if !file_path.exists() {
+        return Ok(());
+    }
+
+    let code = fs::read_to_string(file_path)?;
+    let syntax = match syn::parse_file(&code) {
+        Ok(s) => s,
+        Err(_) => return Ok(()),
+    };
+
+    // File-level module documentation
+    let file_docs = extract_doc_comments(&syntax.attrs);
+    if !file_docs.is_empty() {
+        let contract = parse_intent_contract(&file_docs);
+        format_intent_markdown(out, &contract, heading_level);
+    }
+
+    for item in syntax.items {
+        process_item(&item, base_dir, out, heading_level)?;
+    }
+
+    Ok(())
+}
+
+#[derive(Debug, Clone)]
+pub enum InvariantKind {
+    Assert(String),
+    ErrorRejection,
+}
+
+/// Extracted runtime invariant check, assertion, or error rejection boundary.
+#[derive(Debug, Clone)]
+pub struct ExtractedAssertion {
+    pub kind: InvariantKind,
+    pub condition: String,
+}
+
+pub struct AssertionVisitor {
+    pub assertions: Vec<ExtractedAssertion>,
+}
+
+impl AssertionVisitor {
+    pub fn new() -> Self {
+        Self {
+            assertions: Vec::new(),
+        }
+    }
+}
+
+impl<'ast> Visit<'ast> for AssertionVisitor {
+    fn visit_expr_macro(&mut self, node: &'ast ExprMacro) {
+        if let Some(ident) = node.mac.path.get_ident() {
+            let name = ident.to_string();
+            if matches!(
+                name.as_str(),
+                "assert" | "assert_eq" | "assert_ne" | "ensure" | "debug_assert"
+            ) {
+                let tokens = node.mac.tokens.to_string();
+                let clean = tokens.split('\n').map(str::trim).collect::<Vec<_>>().join(" ");
+                self.assertions.push(ExtractedAssertion {
+                    kind: InvariantKind::Assert(name),
+                    condition: clean,
+                });
+            }
+        }
+        visit::visit_expr_macro(self, node);
+    }
+
+    fn visit_expr_return(&mut self, node: &'ast ExprReturn) {
+        if let Some(expr) = &node.expr {
+            if let Some(err_desc) = match_err_expression(expr) {
+                self.assertions.push(ExtractedAssertion {
+                    kind: InvariantKind::ErrorRejection,
+                    condition: err_desc,
+                });
+            }
+        }
+        visit::visit_expr_return(self, node);
+    }
+
+    fn visit_expr_call(&mut self, node: &'ast ExprCall) {
+        if let Some(err_desc) = match_err_call(node) {
+            self.assertions.push(ExtractedAssertion {
+                kind: InvariantKind::ErrorRejection,
+                condition: err_desc,
+            });
+        }
+        visit::visit_expr_call(self, node);
+    }
+}
+
+fn match_err_expression(expr: &Expr) -> Option<String> {
+    match expr {
+        Expr::Call(call) => match_err_call(call),
+        _ => None,
+    }
+}
+
+fn match_err_call(call: &ExprCall) -> Option<String> {
+    if let Expr::Path(p) = &*call.func {
+        if let Some(seg) = p.path.segments.last() {
+            if seg.ident == "Err" {
+                let tokens = quote::quote!(#call).to_string();
+                let clean = tokens.split('\n').map(str::trim).collect::<Vec<_>>().join(" ");
+                return Some(clean);
+            }
+        }
+    }
+    None
+}
+
+/// Scans an AST block for runtime assertions and invariant guards.
+fn extract_block_assertions(block: &syn::Block) -> Vec<ExtractedAssertion> {
+    let mut visitor = AssertionVisitor::new();
+    visitor.visit_block(block);
+    visitor.assertions
+}
+
+pub fn format_assertions_markdown(
+    out: &mut String,
+    assertions: &[ExtractedAssertion],
+    heading_level: usize,
+) {
+    if assertions.is_empty() {
+        return;
+    }
+
+    let subhashes = "#".repeat((heading_level + 1).min(6));
+    out.push_str(&format!(
+        "{} **Programmatic Invariants & Rejection Boundaries**\n\n",
+        subhashes
+    ));
+
+    for a in assertions {
+        match &a.kind {
+            InvariantKind::Assert(name) => {
+                out.push_str(&format!("* 🔒 `{}`: `{}`\n", name, a.condition));
+            }
+            InvariantKind::ErrorRejection => {
+                out.push_str(&format!("* 🚫 Reject: `{}`\n", a.condition));
+            }
+        }
+    }
+    out.push('\n');
+}
+
+fn process_item(
+    item: &Item,
+    base_dir: &Path,
+    out: &mut String,
+    level: usize,
+) -> Result<()> {
+    let hashes = "#".repeat(level.min(6));
+
+    match item {
+        Item::Mod(ItemMod {
+            vis: Visibility::Public(_),
+            ident,
+            content,
+            attrs,
+            ..
+        }) => {
+            out.push_str(&format!("{} Module `{}`\n\n", hashes, ident));
+            let docs = extract_doc_comments(attrs);
+            if !docs.is_empty() {
+                let contract = parse_intent_contract(&docs);
+                format_intent_markdown(out, &contract, level);
+            }
+
+            if let Some((_, inline_items)) = content {
+                for inner in inline_items {
+                    process_item(inner, base_dir, out, level + 1)?;
+                }
+            } else {
+                let mod_file_direct = base_dir.join(format!("{}.rs", ident));
+                let mod_file_dir = base_dir.join(ident.to_string()).join("mod.rs");
+
+                if mod_file_direct.exists() {
+                    scan_file(&mod_file_direct, &base_dir.join(ident.to_string()), out, level + 1)?;
+                } else if mod_file_dir.exists() {
+                    scan_file(&mod_file_dir, &base_dir.join(ident.to_string()), out, level + 1)?;
+                }
+            }
+        }
+        Item::Struct(ItemStruct {
+            vis: Visibility::Public(_),
+            ident,
+            fields,
+            attrs,
+            ..
+        }) => {
+            out.push_str(&format!("{} `struct {}`\n\n", hashes, ident));
+            let docs = extract_doc_comments(attrs);
+            if !docs.is_empty() {
+                let contract = parse_intent_contract(&docs);
+                format_intent_markdown(out, &contract, level);
+            }
+
+            match fields {
+                Fields::Named(named) => {
+                    out.push_str("**Fields:**\n\n");
+                    for f in &named.named {
+                        if let Visibility::Public(_) = f.vis {
+                            let f_name = f.ident.as_ref().map(|i| i.to_string()).unwrap_or_default();
+                            let f_ty = quote::quote!(#f.ty).to_string();
+                            let f_doc = extract_doc_comments(&f.attrs);
+                            if f_doc.is_empty() {
+                                out.push_str(&format!("* `{}: {}`\n", f_name, f_ty));
+                            } else {
+                                out.push_str(&format!("* `{}: {}` - {}\n", f_name, f_ty, f_doc));
+                            }
+                        }
+                    }
+                    out.push('\n');
+                }
+                Fields::Unnamed(unnamed) => {
+                    let tuple_types: Vec<_> = unnamed
+                        .unnamed
+                        .iter()
+                        .map(|f| quote::quote!(#f.ty).to_string())
+                        .collect();
+                    out.push_str(&format!("Tuple Struct: `({})`\n\n", tuple_types.join(", ")));
+                }
+                Fields::Unit => {}
+            }
+        }
+        Item::Enum(ItemEnum {
+            vis: Visibility::Public(_),
+            ident,
+            variants,
+            attrs,
+            ..
+        }) => {
+            out.push_str(&format!("{} `enum {}`\n\n", hashes, ident));
+            let docs = extract_doc_comments(attrs);
+            if !docs.is_empty() {
+                let contract = parse_intent_contract(&docs);
+                format_intent_markdown(out, &contract, level);
+            }
+
+            out.push_str("**Variants:**\n\n");
+            for v in variants {
+                let v_doc = extract_doc_comments(&v.attrs);
+                let v_name = &v.ident;
+                if v_doc.is_empty() {
+                    out.push_str(&format!("* `{}`\n", v_name));
+                } else {
+                    out.push_str(&format!("* `{}` - {}\n", v_name, v_doc));
+                }
+            }
+            out.push('\n');
+        }
+        Item::Trait(ItemTrait {
+            vis: Visibility::Public(_),
+            ident,
+            items,
+            attrs,
+            ..
+        }) => {
+            out.push_str(&format!("{} `trait {}`\n\n", hashes, ident));
+            let docs = extract_doc_comments(attrs);
+            if !docs.is_empty() {
+                let contract = parse_intent_contract(&docs);
+                format_intent_markdown(out, &contract, level);
+            }
+
+            out.push_str("**Methods:**\n\n");
+            for ti in items {
+                if let syn::TraitItem::Fn(m) = ti {
+                    let sig = quote::quote!(#m.sig).to_string();
+                    let m_docs = extract_doc_comments(&m.attrs);
+                    if m_docs.is_empty() {
+                        out.push_str(&format!("* `{}`\n", sig));
+                    } else {
+                        out.push_str(&format!("* `{}` - {}\n", sig, m_docs));
+                    }
+                }
+            }
+            out.push('\n');
+        }
+        Item::Fn(ItemFn {
+            vis: Visibility::Public(_),
+            sig,
+            attrs,
+            block,
+            ..
+        }) => {
+            out.push_str(&format!("{} `fn {}`\n\n", hashes, sig.ident));
+            let docs = extract_doc_comments(attrs);
+            if !docs.is_empty() {
+                let contract = parse_intent_contract(&docs);
+                format_intent_markdown(out, &contract, level);
+            }
+            out.push_str(&format!("```rust\n{}\n```\n\n", quote::quote!(#sig)));
+
+            let assertions = extract_block_assertions(block);
+            format_assertions_markdown(out, &assertions, level);
+        }
+        Item::Impl(ItemImpl {
+            items,
+            self_ty,
+            trait_,
+            ..
+        }) => {
+            let type_name = quote::quote!(#self_ty).to_string();
+            let impl_header = if let Some((_, tr, _)) = trait_ {
+                format!("impl {} for {}", quote::quote!(#tr), type_name)
+            } else {
+                format!("impl {}", type_name)
+            };
+
+            for impl_item in items {
+                if let ImplItem::Fn(m) = impl_item {
+                    if let Visibility::Public(_) = m.vis {
+                        let sig_str = quote::quote!(#m.sig).to_string();
+                        out.push_str(&format!("{} `{}` ({})\n\n", hashes, sig_str, impl_header));
+
+                        let docs = extract_doc_comments(&m.attrs);
+                        if !docs.is_empty() {
+                            let contract = parse_intent_contract(&docs);
+                            format_intent_markdown(out, &contract, level);
+                        }
+
+                        let assertions = extract_block_assertions(&m.block);
+                        format_assertions_markdown(out, &assertions, level);
+                    }
+                }
+            }
+        }
+        _ => {}
+    }
+
+    Ok(())
+}
+
 #[derive(Parser, Debug)]
 #[command(
     name = "cargo-docversion",
@@ -147,7 +530,8 @@ pub fn run_cli(cli: DocversionCli) -> Result<()> {
 }
 
 fn execute_doc(args: DocArgs) -> Result<()> {
-    let metadata = MetadataCommand::new()
+    let meta_cmd = MetadataCommand::new();
+    let metadata = meta_cmd
         .exec()
         .context("Failed to resolve workspace metadata")?;
 
@@ -267,6 +651,14 @@ fn execute_doc(args: DocArgs) -> Result<()> {
   /* When collapsed (Show all), rustdoc applies .will-expand: rotate 180deg */
   #toggle-all-docs.will-expand::before {
     transform: rotate(180deg) !important;
+  }
+
+  /* Obsidian callout block styling for human-facing markdown docs */
+  .docblock blockquote {
+    border-left: 3px solid #ffb454 !important;
+    background: rgba(255, 180, 84, 0.04) !important;
+    padding: 8px 14px !important;
+    border-radius: 2px !important;
   }
 </style>"#;
     fs::write(&head_path, head_html)?;
@@ -592,6 +984,17 @@ fn execute_build_site(args: BuildSiteArgs) -> Result<()> {
 
     let git_rev = compute_doc_revision(".", &["src/", "docs/", "README.md"])
         .unwrap_or_else(|_| "rev.clean".to_string());
+    // Synthesize autonomous agent documentation indexes
+    println!("==> docversion: Generating llms.txt context index...");
+    let markdown_summary = generate_markdown_summary(&primary_name, Path::new("."))?;
+
+    // 1. Root distribution level
+    atomic_write(args.out_dir.join("llms.txt"), markdown_summary.as_bytes())?;
+    atomic_write(args.out_dir.join("api-reference.md"), markdown_summary.as_bytes())?;
+
+    // 2. Versioned directory level (e.g. target/doc_site/v0.2.0/llms.txt)
+    atomic_write(version_dir.join("llms.txt"), markdown_summary.as_bytes())?;
+    atomic_write(latest_dir.join("llms.txt"), markdown_summary.as_bytes())?;
 
     let manifest_path = args.out_dir.join("versions.json");
     let mut versions: Vec<SiteManifestEntry> = if manifest_path.exists() {
@@ -794,4 +1197,104 @@ fn atomic_write<P: AsRef<Path>>(path: P, data: &[u8]) -> Result<()> {
     fs::write(&tmp, data)?;
     fs::rename(tmp, path)?;
     Ok(())
+}
+
+/// Parsed intentional sections from doc comments.
+#[derive(Default, Debug)]
+struct IntentContract {
+    summary: String,
+    intent: Option<String>,
+    guarantees: Vec<String>,
+    invariants: Vec<String>,
+    non_goals: Vec<String>,
+    notes: Vec<String>,
+}
+
+fn parse_intent_contract(doc_text: &str) -> IntentContract {
+    let mut contract = IntentContract::default();
+    let mut target: Option<&mut Vec<String>> = None;
+
+    for line in doc_text.lines() {
+        let clean = line
+            .trim()
+            .trim_start_matches(|c| c == '>' || c == '#' || c == '*' || c == '-' || c == ' ')
+            .trim();
+        let lower = clean.to_lowercase();
+
+        if lower.starts_with("intent") {
+            let desc = clean["intent".len()..]
+                .trim_start_matches(|c| c == ':' || c == '*' || c == ' ')
+                .trim();
+            if !desc.is_empty() {
+                contract.intent = Some(desc.to_string());
+            }
+            target = None;
+        } else if lower.starts_with("guarantee") {
+            target = Some(&mut contract.guarantees);
+        } else if lower.starts_with("invariant") {
+            target = Some(&mut contract.invariants);
+        } else if lower.starts_with("non-goal") || lower.starts_with("non goal") {
+            target = Some(&mut contract.non_goals);
+        } else if lower.starts_with("note") {
+            target = Some(&mut contract.notes);
+        } else if let Some(ref mut list) = target {
+            if !clean.is_empty() {
+                list.push(clean.to_string());
+            }
+        } else if contract.intent.is_none() && !clean.is_empty() {
+            if contract.summary.is_empty() {
+                contract.summary = clean.to_string();
+            } else {
+                contract.summary.push_str(&format!(" {}", clean));
+            }
+        }
+    }
+
+    contract
+}
+
+fn format_intent_markdown(out: &mut String, contract: &IntentContract, heading_level: usize) {
+    let subhashes = "#".repeat((heading_level + 1).min(6));
+
+    if let Some(intent) = &contract.intent {
+        out.push_str(&format!(
+            "{} **Intent Directive**\n\n> {}\n\n",
+            subhashes,
+            intent.replace('\n', "\n> ")
+        ));
+    } else if !contract.summary.is_empty() {
+        out.push_str(&format!("{}\n\n", contract.summary));
+    }
+
+    if !contract.guarantees.is_empty() {
+        out.push_str(&format!("{} **Guarantees**\n\n", subhashes));
+        for g in &contract.guarantees {
+            out.push_str(&format!("* [x] **Guarantee:** {}\n", g));
+        }
+        out.push('\n');
+    }
+
+    if !contract.invariants.is_empty() {
+        out.push_str(&format!("{} **System Invariants**\n\n", subhashes));
+        for inv in &contract.invariants {
+            out.push_str(&format!("* 🛡️ `{}`\n", inv));
+        }
+        out.push('\n');
+    }
+
+    if !contract.non_goals.is_empty() {
+        out.push_str(&format!("{} **Explicit Non-Goals**\n\n", subhashes));
+        for ng in &contract.non_goals {
+            out.push_str(&format!("* ⛔ {}\n", ng));
+        }
+        out.push('\n');
+    }
+
+    if !contract.notes.is_empty() {
+        out.push_str(&format!("{} **Architectural Notes**\n\n", subhashes));
+        for note in &contract.notes {
+            out.push_str(&format!("* 📝 {}\n", note));
+        }
+        out.push('\n');
+    }
 }
