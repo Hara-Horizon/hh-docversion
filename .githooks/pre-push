@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-echo "==> [pre-push] Running full workspace CI suite before push..."
-cargo xtask ci
+echo "==> Running pre-push checks..."
+cargo check --workspace --all-targets
+cargo test --workspace
+cargo clippy --workspace --all-targets -- -D warnings
+echo "==> Pre-push verification passed."
