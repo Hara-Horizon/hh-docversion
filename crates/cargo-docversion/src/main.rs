@@ -1,17 +1,28 @@
 use clap::Parser;
 
-fn main() -> anyhow::Result<()> {
-    let args = std::env::args().collect::<Vec<_>>();
-    // If invoked directly as "cargo-docversion <subcmd>", normalize so CargoCli parses cleanly
-    let cli = if args.len() > 1 && args[1] != "docversion" {
-        cargo_docversion::CargoCli::parse_from(
-            std::iter::once("cargo".to_string())
-                .chain(std::iter::once("docversion".to_string()))
-                .chain(args.into_iter().skip(1)),
-        )
-    } else {
-        cargo_docversion::CargoCli::parse()
+fn main() {
+    let raw: Vec<String> = std::env::args().collect();
+    eprintln!("[docversion debug] Raw arguments: {:?}", raw);
+
+    let mut clean_args: Vec<String> = raw
+        .into_iter()
+        .skip(1)
+        .filter(|arg| arg != "docversion")
+        .collect();
+
+    clean_args.insert(0, "docversion".to_string());
+    eprintln!("[docversion debug] Passing to DocversionCli: {:?}", clean_args);
+
+    let cli = match cargo_docversion::DocversionCli::try_parse_from(&clean_args) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("[docversion parse error]\n{}", e);
+            std::process::exit(1);
+        }
     };
 
-    cargo_docversion::run_cargo_plugin(cli)
+    if let Err(err) = cargo_docversion::run_cli(cli) {
+        eprintln!("[docversion error] Execution failed: {:#}", err);
+        std::process::exit(1);
+    }
 }
