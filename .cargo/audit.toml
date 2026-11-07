@@ -1,0 +1,12 @@
+[advisories]
+# Documented upstream security audit triage
+# RUSTSEC-2025-0140: Non-utf8 String can be created with TimeBuf::as_str.
+# Transitive dependency of gix 0.73.0 via gix-actor/gix-object.
+# Triage: Non-exploitable in hh-docversion as docversion-git reads commit history
+# and object trees directly without invoking raw TimeBuf date string formatting.
+ignore = [
+    "RUSTSEC-2025-0140",
+]
+
+# informational_warnings expects a sequence of strings:
+informational_warnings = ["unsound", "unmaintained"]
