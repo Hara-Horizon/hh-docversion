@@ -3,8 +3,7 @@ members = [
     "crates/docversion-core",
     "crates/docversion-git",
     "crates/docversion-manifest",
-    "crates/cargo-docversion",
-    "xtask",
+    "crates/cargo-docversion"
 ]
 resolver = "2"
 
