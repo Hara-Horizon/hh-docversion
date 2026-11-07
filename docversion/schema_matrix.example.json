@@ -1,0 +1,13 @@
+{
+"$schema": "https://hara-horizon.internal/schemas/matrix.v1.json",
+"generated_at": "2026-11-07T00:00:00Z",
+"contracts": [
+{
+"schema_id": "core-ledger",
+"schema_version": 4,
+"supported_app_range": ">=1.4.0, <2.0.0",
+"artifact_uri": "https://dist.hara-horizon.internal/db/core-ledger-v4.sqlite",
+"sha256": "4b227777d4dd1fc61c6f884f48641d02b4d121d3fd328cb08b5531fcacdabf8a"
+}
+]
+}
