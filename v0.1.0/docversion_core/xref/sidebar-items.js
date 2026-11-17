@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["SymbolKind"],"struct":["SymbolEntry","WorkspaceSymbolIndex"]};
+window.SIDEBAR_ITEMS = {"enum":["SymbolKind"],"fn":["relative_doc_path"],"struct":["SymbolEntry","WorkspaceSymbolIndex"]};

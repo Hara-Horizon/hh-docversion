@@ -8,10 +8,16 @@
 
 ### `fn generate_markdown_summary`
 
-Two-pass workspace scanner: 1. Indexes all public symbols across workspace crates into `WorkspaceSymbolIndex`. 2. Renders public interfaces, doctests, multi-language files, and `docs/*.md` with resolved cross-crate intra-doc links.
+Two-pass workspace scanner: 1. Indexes all public symbols across workspace crates into `WorkspaceSymbolIndex`. 2. Renders public interfaces, doctests, multi-language files, and handwritten `docs/*.md` guides with resolved cross-crate intra-doc links.
 
 ~~~rust
 pub fn generate_markdown_summary(workspace_title: &str, crate_root: &Path) -> Result<String>
+~~~
+
+### `fn export_tracked_docs_tree`
+
+~~~rust
+pub fn export_tracked_docs_tree(workspace_root: &Path, out_dir: &Path) -> Result<()>
 ~~~
 
 ### `enum InvariantKind`
@@ -90,6 +96,7 @@ pub fn format_assertions_markdown(out: &mut String, assertions: &[ExtractedAsser
 
 * `Doc` - Document workspace crates with version-injected banners
 * `BuildSite` - Assemble versioned distribution tree into target directory
+* `ExportMd` - Export tracked Markdown docs/ directory (README.md index, per-module .md files, api-reference.md)
 * `VerifyDb` - Verify application compatibility against schema migration matrix
 * `Site` - One-shot build: compiles documentation and bundles versioned site
 
@@ -117,6 +124,12 @@ pub fn format_assertions_markdown(out: &mut String, assertions: &[ExtractedAsser
 * `entry_page: String` - Landing page relative path within docs
 * `out_dir: PathBuf` - Output directory for bundled distribution
 * `format: DocFormat` - Output format mode
+
+### `struct ExportMdArgs`
+
+**Fields:**
+
+* `out_dir: PathBuf` - Output directory for tracked Markdown documentation tree
 
 ### `struct VerifyDbArgs`
 
@@ -209,6 +222,7 @@ Canonical location of an indexed workspace symbol.
 * `short_name: String` - Short item name (e.g., `sanitize_for_shortcut_docs` or `VersionIdentifier::new`).
 * `kind: SymbolKind` - Item classification.
 * `markdown_anchor: String` - Single-file Markdown heading slug (e.g., `#fn-sanitize_for_shortcut_docs`).
+* `doc_rel_path: String` - Multi-file tracked `docs/` relative path (e.g., `docversion_core.md` or `docversion_core/shortcut.md`).
 * `rustdoc_path: String` - Relative Rustdoc HTML path (e.g., `docversion_core/shortcut/fn.sanitize_for_shortcut_docs.html`).
 
 #### `struct WorkspaceSymbolIndex`
@@ -242,10 +256,26 @@ pub fn resolve(&self, raw_target: &str, current_crate: &str, current_type: Optio
 
 #### `fn resolve_markdown_links` (impl WorkspaceSymbolIndex)
 
-Rewrites Rustdoc intra-doc links in Markdown prose into Markdown anchor links (`#...`), preserving fenced code blocks and standard inline code spans.
+Rewrites Rustdoc intra-doc links in single-file Markdown prose into `#anchor` links.
 
 ~~~rust
 pub fn resolve_markdown_links(&self, markdown: &str, current_crate: &str, current_type: Option<&str>,) -> String
+~~~
+
+#### `fn resolve_multifile_markdown_links` (impl WorkspaceSymbolIndex)
+
+Rewrites Rustdoc intra-doc links in multi-file `docs/` exports into relative `.md#anchor` links calculated from `current_doc_path` (e.g., `"docversion_core/shortcut.md"`).
+
+~~~rust
+pub fn resolve_multifile_markdown_links(&self, markdown: &str, current_crate: &str, current_type: Option<&str>, current_doc_path: &str,) -> String
+~~~
+
+#### `fn relative_doc_path`
+
+Computes a POSIX-style relative Markdown path from `from_file` to `to_file` inside `docs/`.
+
+~~~rust
+pub fn relative_doc_path(from_file: &str, to_file: &str) -> String
 ~~~
 
 ### `enum CoreError`
@@ -347,6 +377,7 @@ pub fn generate_redirect_html(target_url: &str) -> Result<String, CoreError>
 
 * `tree_hash: String`
 * `is_dirty: bool`
+* `latest_tag: Option<String>`
 
 ### `fn resolve` (impl GitContext)
 
