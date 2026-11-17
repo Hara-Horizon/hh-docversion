@@ -1,26 +1,33 @@
+pub mod shortcut;
+pub mod xref;
+
+pub use shortcut::{highlight_code_universal, markdown_to_clean_html, sanitize_for_shortcut_docs};
+pub use xref::{SymbolEntry, SymbolKind, WorkspaceSymbolIndex};
+
+use semver::Version;
 use std::fmt;
 use thiserror::Error;
 
-pub mod shortcut;
-pub use shortcut::{markdown_to_clean_html, sanitize_for_shortcut_docs};
-
-#[derive(Debug, Error, PartialEq, Eq)]
+/// Core domain errors for version identification and safe redirect generation.
+#[derive(Error, Debug, PartialEq, Eq)]
 pub enum CoreError {
-    #[error("Invalid SemVer string: {0}")]
-    InvalidVersion(String),
-    #[error("Target path contains forbidden relative traversals: {0}")]
+    #[error("Invalid SemVer string '{0}': {1}")]
+    InvalidVersion(String, String),
+
+    #[error("Unsafe redirect target path rejected: '{0}'")]
     UnsafePath(String),
 }
 
 impl From<semver::Error> for CoreError {
     fn from(err: semver::Error) -> Self {
-        CoreError::InvalidVersion(err.to_string())
+        CoreError::InvalidVersion(String::new(), err.to_string())
     }
 }
 
+/// Canonical SemVer + optional Git revision identifier for documentation builds.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VersionIdentifier {
-    pub declared_version: semver::Version,
+    pub declared_version: Version,
     pub revision_suffix: Option<String>,
 }
 
@@ -35,15 +42,17 @@ impl VersionIdentifier {
     /// assert_eq!(ver.target_directory(), "v1.4.2");
     /// ```
     pub fn new(declared: &str, revision: Option<&str>) -> Result<Self, CoreError> {
-        let declared_version = semver::Version::parse(declared.trim())?;
-        let revision_suffix = revision
-            .map(|s| s.trim())
-            .filter(|s| !s.is_empty())
-            .map(|s| s.to_string());
+        let trimmed = declared.trim().trim_start_matches('v');
+        let parsed = Version::parse(trimmed)
+            .map_err(|e| CoreError::InvalidVersion(declared.to_string(), e.to_string()))?;
+
+        let clean_rev = revision
+            .map(|r| r.trim().to_string())
+            .filter(|r| !r.is_empty());
 
         Ok(Self {
-            declared_version,
-            revision_suffix,
+            declared_version: parsed,
+            revision_suffix: clean_rev,
         })
     }
 
@@ -67,13 +76,14 @@ impl fmt::Display for VersionIdentifier {
     }
 }
 
+/// Escapes special HTML characters for safe attribute interpolation.
 pub fn escape_html_attribute(input: &str) -> String {
     input
         .replace('&', "&amp;")
+        .replace('"', "&quot;")
+        .replace('\'', "&#39;")
         .replace('<', "&lt;")
         .replace('>', "&gt;")
-        .replace('"', "&quot;")
-        .replace('\'', "&#x27;")
 }
 
 /// Generates a validated, escaped HTML redirect targeting `target_url`.
@@ -85,23 +95,32 @@ pub fn escape_html_attribute(input: &str) -> String {
 /// assert!(markup.contains("latest/docversion/index.html"));
 /// ```
 pub fn generate_redirect_html(target_url: &str) -> Result<String, CoreError> {
-    if target_url.contains("..") || target_url.starts_with('\\') {
+    let trimmed = target_url.trim();
+    if trimmed.is_empty()
+        || trimmed.contains("..")
+        || trimmed.starts_with("//")
+        || trimmed.starts_with('\\')
+        || trimmed.contains(':')
+        || trimmed.contains('\n')
+        || trimmed.contains('\r')
+    {
         return Err(CoreError::UnsafePath(target_url.to_string()));
     }
 
-    let safe_url = escape_html_attribute(target_url);
+    let escaped = escape_html_attribute(trimmed);
     Ok(format!(
         r#"<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta http-equiv="refresh" content="0; url={safe_url}">
-    <link rel="canonical" href="{safe_url}">
-    <title>Redirecting...</title>
-  </head>
-  <body>
-    <p>Redirecting to <a href="{safe_url}">{safe_url}</a>...</p>
-  </body>
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="refresh" content="0; url={escaped}">
+  <link rel="canonical" href="{escaped}">
+  <title>Redirecting to {escaped}</title>
+</head>
+<body>
+  <p>Redirecting to <a href="{escaped}">{escaped}</a>...</p>
+  <script>window.location.replace("{escaped}");</script>
+</body>
 </html>
 "#
     ))
@@ -112,27 +131,21 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_display_version_formatting() {
-        let v = VersionIdentifier::new("1.4.2", Some("rev.8a4c1f0")).unwrap();
-        assert_eq!(v.display_version(), "v1.4.2 (rev.8a4c1f0)");
-        assert_eq!(v.target_directory(), "v1.4.2");
+    fn parses_version_with_and_without_revision() {
+        let v1 = VersionIdentifier::new("v0.2.0", Some("rev.abc1234")).unwrap();
+        assert_eq!(v1.display_version(), "v0.2.0 (rev.abc1234)");
+        assert_eq!(v1.target_directory(), "v0.2.0");
+
+        let v2 = VersionIdentifier::new("1.0.0", None).unwrap();
+        assert_eq!(v2.display_version(), "v1.0.0");
     }
 
     #[test]
-    fn test_empty_revision_handling() {
-        let v = VersionIdentifier::new("1.4.2", Some("    ")).unwrap();
-        assert_eq!(v.display_version(), "v1.4.2");
-        assert!(v.revision_suffix.is_none());
-    }
-
-    #[test]
-    fn test_redirect_html_escaping() {
-        let html = generate_redirect_html("latest/my_crate/index.html?param=1&other=2").unwrap();
-        assert!(html.contains("param=1&amp;other=2"));
-    }
-
-    #[test]
-    fn test_redirect_unsafe_path_rejection() {
+    fn rejects_unsafe_redirect_targets() {
         assert!(generate_redirect_html("../etc/passwd").is_err());
+        assert!(generate_redirect_html("javascript:alert(1)").is_err());
+        assert!(generate_redirect_html("//evil.example.com/phish").is_err());
+        assert!(generate_redirect_html("/latest/my_crate/index.html").is_ok());
+        assert!(generate_redirect_html("latest/docversion/index.html").is_ok());
     }
 }

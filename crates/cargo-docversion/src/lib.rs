@@ -5,7 +5,10 @@ use std::process::Command;
 use anyhow::{bail, Context, Result};
 use cargo_metadata::MetadataCommand;
 use clap::{Args, Parser, Subcommand, ValueEnum};
-use docversion_core::{generate_redirect_html, sanitize_for_shortcut_docs, VersionIdentifier};
+use docversion_core::{
+    generate_redirect_html, sanitize_for_shortcut_docs, SymbolEntry, SymbolKind, VersionIdentifier,
+    WorkspaceSymbolIndex,
+};
 use docversion_git::compute_doc_revision;
 use docversion_manifest::SchemaMatrix;
 use serde::{Deserialize, Serialize};
@@ -15,6 +18,44 @@ use syn::{
     ExprCall, ExprMacro, Fields, ImplItem, Item, ItemConst, ItemEnum, ItemFn, ItemImpl, ItemMod,
     ItemStruct, ItemTrait, ItemType, Visibility,
 };
+
+/// Context carried through Pass 2 Markdown rendering for exact cross-crate link resolution.
+struct RenderContext<'a> {
+    index: &'a WorkspaceSymbolIndex,
+    current_crate: &'a str,
+    current_type: Option<&'a str>,
+}
+
+impl<'a> RenderContext<'a> {
+    fn resolve_text(&self, text: &str) -> String {
+        self.index
+            .resolve_markdown_links(text, self.current_crate, self.current_type)
+    }
+
+    fn with_type(&self, ty: &'a str) -> RenderContext<'a> {
+        RenderContext {
+            index: self.index,
+            current_crate: self.current_crate,
+            current_type: Some(ty),
+        }
+    }
+}
+
+/// Generates a GitHub/Shortcut-compatible heading anchor slug matching Markdown heading rules.
+fn heading_slug(raw_heading: &str) -> String {
+    let mut slug = String::with_capacity(raw_heading.len());
+    for ch in raw_heading.chars() {
+        if ch.is_ascii_alphanumeric() {
+            slug.push(ch.to_ascii_lowercase());
+        } else if ch == ' ' || ch == '-' || ch == '_' {
+            slug.push('-');
+        }
+    }
+    while slug.contains("--") {
+        slug = slug.replace("--", "-");
+    }
+    format!("#{}", slug.trim_matches('-'))
+}
 
 /// Normalizes `quote!` token strings into clean, idiomatic code formatting.
 fn normalize_token_spacing(raw: &str) -> String {
@@ -76,12 +117,266 @@ fn extract_doc_comments(attrs: &[syn::Attribute]) -> String {
     docs.join("\n")
 }
 
+/// Pass 1: Collects public symbols across a single crate root into `WorkspaceSymbolIndex`.
+fn collect_crate_symbols(
+    crate_ident: &str,
+    crate_root: &Path,
+    index: &mut WorkspaceSymbolIndex,
+) -> Result<()> {
+    let src_dir = crate_root.join("src");
+    let lib_rs = src_dir.join("lib.rs");
+    let main_rs = src_dir.join("main.rs");
+
+    let entry_file = if lib_rs.exists() {
+        lib_rs
+    } else if main_rs.exists() {
+        main_rs
+    } else {
+        return Ok(());
+    };
+
+    collect_file_symbols(&entry_file, &src_dir, crate_ident, &[], index)
+}
+
+fn collect_file_symbols(
+    file_path: &Path,
+    base_dir: &Path,
+    crate_ident: &str,
+    mod_segments: &[String],
+    index: &mut WorkspaceSymbolIndex,
+) -> Result<()> {
+    if !file_path.exists() {
+        return Ok(());
+    }
+
+    let code = fs::read_to_string(file_path)?;
+    let syntax = match syn::parse_file(&code) {
+        Ok(s) => s,
+        Err(_) => return Ok(()),
+    };
+
+    for item in &syntax.items {
+        collect_item_symbol(item, base_dir, crate_ident, mod_segments, index)?;
+    }
+
+    Ok(())
+}
+
+fn build_qualified_path(crate_ident: &str, mod_segments: &[String], item_name: &str) -> String {
+    if mod_segments.is_empty() {
+        format!("{}::{}", crate_ident, item_name)
+    } else {
+        format!("{}::{}::{}", crate_ident, mod_segments.join("::"), item_name)
+    }
+}
+
+fn build_rustdoc_prefix(crate_ident: &str, mod_segments: &[String]) -> String {
+    if mod_segments.is_empty() {
+        crate_ident.to_string()
+    } else {
+        format!("{}/{}", crate_ident, mod_segments.join("/"))
+    }
+}
+
+fn collect_item_symbol(
+    item: &Item,
+    base_dir: &Path,
+    crate_ident: &str,
+    mod_segments: &[String],
+    index: &mut WorkspaceSymbolIndex,
+) -> Result<()> {
+    let html_prefix = build_rustdoc_prefix(crate_ident, mod_segments);
+
+    match item {
+        Item::Mod(ItemMod {
+            vis: Visibility::Public(_),
+            ident,
+            content,
+            ..
+        }) => {
+            let name = ident.to_string();
+            let full_path = build_qualified_path(crate_ident, mod_segments, &name);
+            index.insert(SymbolEntry {
+                crate_ident: crate_ident.to_string(),
+                full_path,
+                short_name: name.clone(),
+                kind: SymbolKind::Module,
+                markdown_anchor: heading_slug(&format!("Module {}", name)),
+                rustdoc_path: format!("{}/{}/index.html", html_prefix, name),
+            });
+
+            let mut next_mods = mod_segments.to_vec();
+            next_mods.push(name.clone());
+
+            if let Some((_, inline_items)) = content {
+                for inner in inline_items {
+                    collect_item_symbol(inner, base_dir, crate_ident, &next_mods, index)?;
+                }
+            } else {
+                let mod_file_direct = base_dir.join(format!("{}.rs", name));
+                let mod_file_dir = base_dir.join(&name).join("mod.rs");
+
+                if mod_file_direct.exists() {
+                    collect_file_symbols(
+                        &mod_file_direct,
+                        &base_dir.join(&name),
+                        crate_ident,
+                        &next_mods,
+                        index,
+                    )?;
+                } else if mod_file_dir.exists() {
+                    collect_file_symbols(
+                        &mod_file_dir,
+                        &base_dir.join(&name),
+                        crate_ident,
+                        &next_mods,
+                        index,
+                    )?;
+                }
+            }
+        }
+        Item::Struct(ItemStruct {
+            vis: Visibility::Public(_),
+            ident,
+            ..
+        }) => {
+            let name = ident.to_string();
+            index.insert(SymbolEntry {
+                crate_ident: crate_ident.to_string(),
+                full_path: build_qualified_path(crate_ident, mod_segments, &name),
+                short_name: name.clone(),
+                kind: SymbolKind::Struct,
+                markdown_anchor: heading_slug(&format!("struct {}", name)),
+                rustdoc_path: format!("{}/struct.{}.html", html_prefix, name),
+            });
+        }
+        Item::Enum(ItemEnum {
+            vis: Visibility::Public(_),
+            ident,
+            ..
+        }) => {
+            let name = ident.to_string();
+            index.insert(SymbolEntry {
+                crate_ident: crate_ident.to_string(),
+                full_path: build_qualified_path(crate_ident, mod_segments, &name),
+                short_name: name.clone(),
+                kind: SymbolKind::Enum,
+                markdown_anchor: heading_slug(&format!("enum {}", name)),
+                rustdoc_path: format!("{}/enum.{}.html", html_prefix, name),
+            });
+        }
+        Item::Trait(ItemTrait {
+            vis: Visibility::Public(_),
+            ident,
+            ..
+        }) => {
+            let name = ident.to_string();
+            index.insert(SymbolEntry {
+                crate_ident: crate_ident.to_string(),
+                full_path: build_qualified_path(crate_ident, mod_segments, &name),
+                short_name: name.clone(),
+                kind: SymbolKind::Trait,
+                markdown_anchor: heading_slug(&format!("trait {}", name)),
+                rustdoc_path: format!("{}/trait.{}.html", html_prefix, name),
+            });
+        }
+        Item::Fn(ItemFn {
+            vis: Visibility::Public(_),
+            sig,
+            ..
+        }) => {
+            let name = sig.ident.to_string();
+            index.insert(SymbolEntry {
+                crate_ident: crate_ident.to_string(),
+                full_path: build_qualified_path(crate_ident, mod_segments, &name),
+                short_name: name.clone(),
+                kind: SymbolKind::Function,
+                markdown_anchor: heading_slug(&format!("fn {}", name)),
+                rustdoc_path: format!("{}/fn.{}.html", html_prefix, name),
+            });
+        }
+        Item::Type(ItemType {
+            vis: Visibility::Public(_),
+            ident,
+            ..
+        }) => {
+            let name = ident.to_string();
+            index.insert(SymbolEntry {
+                crate_ident: crate_ident.to_string(),
+                full_path: build_qualified_path(crate_ident, mod_segments, &name),
+                short_name: name.clone(),
+                kind: SymbolKind::TypeAlias,
+                markdown_anchor: heading_slug(&format!("type {}", name)),
+                rustdoc_path: format!("{}/type.{}.html", html_prefix, name),
+            });
+        }
+        Item::Const(ItemConst {
+            vis: Visibility::Public(_),
+            ident,
+            ..
+        }) => {
+            let name = ident.to_string();
+            index.insert(SymbolEntry {
+                crate_ident: crate_ident.to_string(),
+                full_path: build_qualified_path(crate_ident, mod_segments, &name),
+                short_name: name.clone(),
+                kind: SymbolKind::Constant,
+                markdown_anchor: heading_slug(&format!("const {}", name)),
+                rustdoc_path: format!("{}/constant.{}.html", html_prefix, name),
+            });
+        }
+        Item::Impl(ItemImpl {
+            items,
+            self_ty,
+            trait_,
+            ..
+        }) => {
+            let type_name = normalize_token_spacing(&quote::quote!(#self_ty).to_string());
+            let is_trait_impl = trait_.is_some();
+            let impl_header = if let Some((_, tr, _)) = trait_ {
+                let tr_name = normalize_token_spacing(&quote::quote!(#tr).to_string());
+                format!("impl {} for {}", tr_name, type_name)
+            } else {
+                format!("impl {}", type_name)
+            };
+
+            for impl_item in items {
+                if let ImplItem::Fn(m) = impl_item {
+                    if is_trait_impl || matches!(m.vis, Visibility::Public(_)) {
+                        let method_name = m.sig.ident.to_string();
+                        let scoped_short = format!("{}::{}", type_name, method_name);
+                        let full_path =
+                            build_qualified_path(crate_ident, mod_segments, &scoped_short);
+                        let heading_text = format!("fn {} ({})", method_name, impl_header);
+
+                        index.insert(SymbolEntry {
+                            crate_ident: crate_ident.to_string(),
+                            full_path,
+                            short_name: scoped_short,
+                            kind: SymbolKind::Method,
+                            markdown_anchor: heading_slug(&heading_text),
+                            rustdoc_path: format!(
+                                "{}/struct.{}.html#method.{}",
+                                html_prefix, type_name, method_name
+                            ),
+                        });
+                    }
+                }
+            }
+        }
+        _ => {}
+    }
+
+    Ok(())
+}
+
 /// Scans a single crate root (`src/lib.rs` or `src/main.rs`) and appends its public API markdown.
 fn scan_crate_root(
     crate_name: &str,
     crate_root: &Path,
     out: &mut String,
     crate_heading_level: usize,
+    ctx: &RenderContext<'_>,
 ) -> Result<()> {
     let hashes = "#".repeat(crate_heading_level.min(6));
     out.push_str(&format!("---\n\n{} Crate `{}`\n\n", hashes, crate_name));
@@ -98,17 +393,17 @@ fn scan_crate_root(
         return Ok(());
     };
 
-    scan_file(&entry_file, &src_dir, out, crate_heading_level + 1)
+    scan_file(&entry_file, &src_dir, out, crate_heading_level + 1, ctx)
 }
 
-/// Recursively scans Rust crates, Markdown documentation (`docs/*.md`), and multi-language
-/// public interfaces (`.ts`, `.tsx`, `.js`, `.py`, `.go`, `.sql`) into a unified Markdown index.
+/// Two-pass workspace scanner:
+/// 1. Indexes all public symbols across workspace crates into `WorkspaceSymbolIndex`.
+/// 2. Renders public interfaces, doctests, multi-language files, and `docs/*.md` with
+///    resolved cross-crate intra-doc links.
 pub fn generate_markdown_summary(workspace_title: &str, crate_root: &Path) -> Result<String> {
-    let mut out = String::new();
-    out.push_str(&format!("# {}\n\n", workspace_title));
-    out.push_str("> Autonomous Agent API Context & Single-File Documentation Index\n\n");
+    let mut symbol_index = WorkspaceSymbolIndex::new();
+    let mut workspace_crates: Vec<(String, String, PathBuf)> = Vec::new();
 
-    let mut scanned_rust_workspace = false;
     let manifest_path = crate_root.join("Cargo.toml");
     if manifest_path.exists() {
         if let Ok(metadata) = MetadataCommand::new()
@@ -119,27 +414,50 @@ pub fn generate_markdown_summary(workspace_title: &str, crate_root: &Path) -> Re
             let mut packages = metadata.workspace_packages();
             packages.sort_by(|a, b| a.name.cmp(&b.name));
 
-            if !packages.is_empty() {
-                for pkg in packages {
-                    if let Some(pkg_dir) = pkg.manifest_path.parent() {
-                        scan_crate_root(&pkg.name, pkg_dir.as_std_path(), &mut out, 2)?;
-                    }
+            for pkg in packages {
+                if let Some(pkg_dir) = pkg.manifest_path.parent() {
+                    let crate_ident = pkg.name.replace('-', "_");
+                    let pkg_path = pkg_dir.as_std_path().to_path_buf();
+                    collect_crate_symbols(&crate_ident, &pkg_path, &mut symbol_index)?;
+                    workspace_crates.push((pkg.name.clone(), crate_ident, pkg_path));
                 }
-                scanned_rust_workspace = true;
             }
         }
     }
 
-    if !scanned_rust_workspace {
-        // Fallback for standalone Rust source directories without a Cargo.toml
+    if workspace_crates.is_empty() {
+        let fallback_ident = workspace_title.replace('-', "_");
+        collect_crate_symbols(&fallback_ident, crate_root, &mut symbol_index)?;
+    }
+
+    let mut out = String::new();
+    out.push_str(&format!("# {}\n\n", workspace_title));
+    out.push_str("> Autonomous Agent API Context & Single-File Documentation Index\n\n");
+
+    if !workspace_crates.is_empty() {
+        for (crate_name, crate_ident, pkg_dir) in &workspace_crates {
+            let ctx = RenderContext {
+                index: &symbol_index,
+                current_crate: crate_ident,
+                current_type: None,
+            };
+            scan_crate_root(crate_name, pkg_dir, &mut out, 2, &ctx)?;
+        }
+    } else {
+        let fallback_ident = workspace_title.replace('-', "_");
+        let ctx = RenderContext {
+            index: &symbol_index,
+            current_crate: &fallback_ident,
+            current_type: None,
+        };
         let src_dir = crate_root.join("src");
         let lib_rs = src_dir.join("lib.rs");
         let main_rs = src_dir.join("main.rs");
 
         if lib_rs.exists() {
-            scan_file(&lib_rs, &src_dir, &mut out, 2)?;
+            scan_file(&lib_rs, &src_dir, &mut out, 2, &ctx)?;
         } else if main_rs.exists() {
-            scan_file(&main_rs, &src_dir, &mut out, 2)?;
+            scan_file(&main_rs, &src_dir, &mut out, 2, &ctx)?;
         }
     }
 
@@ -149,7 +467,16 @@ pub fn generate_markdown_summary(workspace_title: &str, crate_root: &Path) -> Re
     // Documentation directory Markdown ingestion (docs/**/*.md)
     let docs_dir = crate_root.join("docs");
     if docs_dir.is_dir() {
-        scan_markdown_docs(&docs_dir, crate_root, &mut out)?;
+        let default_crate = workspace_crates
+            .first()
+            .map(|(_, ident, _)| ident.as_str())
+            .unwrap_or("docversion_core");
+        let ctx = RenderContext {
+            index: &symbol_index,
+            current_crate: default_crate,
+            current_type: None,
+        };
+        scan_markdown_docs(&docs_dir, crate_root, &mut out, &ctx)?;
     }
 
     Ok(out)
@@ -265,7 +592,6 @@ fn extract_universal_declarations(content: &str, lang: &str) -> Vec<(String, Str
             }
             doc_lines.reverse();
 
-            // Capture multi-line SQL statement up to `;` or clean signature line
             let sig = if lang == "sql" {
                 let mut stmt = Vec::new();
                 for future_line in &lines[idx..] {
@@ -291,7 +617,6 @@ fn is_go_exported_decl(trimmed: &str) -> bool {
         .strip_prefix("func ")
         .or_else(|| trimmed.strip_prefix("type "))
         .unwrap_or("");
-    // Skip receiver `(r *Receiver) ` if present
     let ident_part = if let Some(after_recv) = after_kw.strip_prefix('(') {
         after_recv
             .split_once(')')
@@ -303,21 +628,27 @@ fn is_go_exported_decl(trimmed: &str) -> bool {
     ident_part.chars().next().is_some_and(|c| c.is_ascii_uppercase())
 }
 
-/// Appends authored Markdown files from `docs/` into the single-file bundle.
-fn scan_markdown_docs(dir: &Path, workspace_root: &Path, out: &mut String) -> Result<()> {
+/// Appends authored Markdown files from `docs/` into the single-file bundle with resolved symbol links.
+fn scan_markdown_docs(
+    dir: &Path,
+    workspace_root: &Path,
+    out: &mut String,
+    ctx: &RenderContext<'_>,
+) -> Result<()> {
     let mut entries: Vec<_> = fs::read_dir(dir)?.filter_map(|e| e.ok()).collect();
     entries.sort_by_key(|e| e.file_name());
 
     for entry in entries {
         let path = entry.path();
         if path.is_dir() {
-            scan_markdown_docs(&path, workspace_root, out)?;
+            scan_markdown_docs(&path, workspace_root, out, ctx)?;
         } else if path.extension().is_some_and(|ext| ext == "md") {
             let rel = path.strip_prefix(workspace_root).unwrap_or(&path);
             let content = fs::read_to_string(&path).unwrap_or_default();
             if !content.trim().is_empty() {
+                let resolved = ctx.resolve_text(content.trim());
                 out.push_str(&format!("---\n\n## Guide `{}`\n\n", rel.display()));
-                out.push_str(content.trim());
+                out.push_str(&resolved);
                 out.push_str("\n\n");
             }
         }
@@ -330,6 +661,7 @@ fn scan_file(
     base_dir: &Path,
     out: &mut String,
     heading_level: usize,
+    ctx: &RenderContext<'_>,
 ) -> Result<()> {
     if !file_path.exists() {
         return Ok(());
@@ -341,15 +673,14 @@ fn scan_file(
         Err(_) => return Ok(()),
     };
 
-    // File-level module documentation
     let file_docs = extract_doc_comments(&syntax.attrs);
     if !file_docs.is_empty() {
         let contract = parse_intent_contract(&file_docs);
-        format_intent_markdown(out, &contract, heading_level);
+        format_intent_markdown(out, &contract, heading_level, ctx);
     }
 
     for item in syntax.items {
-        process_item(&item, base_dir, out, heading_level)?;
+        process_item(&item, base_dir, out, heading_level, ctx)?;
     }
 
     Ok(())
@@ -475,7 +806,13 @@ pub fn format_assertions_markdown(
     out.push('\n');
 }
 
-fn process_item(item: &Item, base_dir: &Path, out: &mut String, level: usize) -> Result<()> {
+fn process_item(
+    item: &Item,
+    base_dir: &Path,
+    out: &mut String,
+    level: usize,
+    ctx: &RenderContext<'_>,
+) -> Result<()> {
     let hashes = "#".repeat(level.min(6));
 
     match item {
@@ -490,12 +827,12 @@ fn process_item(item: &Item, base_dir: &Path, out: &mut String, level: usize) ->
             let docs = extract_doc_comments(attrs);
             if !docs.is_empty() {
                 let contract = parse_intent_contract(&docs);
-                format_intent_markdown(out, &contract, level);
+                format_intent_markdown(out, &contract, level, ctx);
             }
 
             if let Some((_, inline_items)) = content {
                 for inner in inline_items {
-                    process_item(inner, base_dir, out, level + 1)?;
+                    process_item(inner, base_dir, out, level + 1, ctx)?;
                 }
             } else {
                 let mod_file_direct = base_dir.join(format!("{}.rs", ident));
@@ -507,6 +844,7 @@ fn process_item(item: &Item, base_dir: &Path, out: &mut String, level: usize) ->
                         &base_dir.join(ident.to_string()),
                         out,
                         level + 1,
+                        ctx,
                     )?;
                 } else if mod_file_dir.exists() {
                     scan_file(
@@ -514,6 +852,7 @@ fn process_item(item: &Item, base_dir: &Path, out: &mut String, level: usize) ->
                         &base_dir.join(ident.to_string()),
                         out,
                         level + 1,
+                        ctx,
                     )?;
                 }
             }
@@ -530,7 +869,7 @@ fn process_item(item: &Item, base_dir: &Path, out: &mut String, level: usize) ->
             let docs = extract_doc_comments(attrs);
             if !docs.is_empty() {
                 let contract = parse_intent_contract(&docs);
-                format_intent_markdown(out, &contract, level);
+                format_intent_markdown(out, &contract, level, ctx);
             }
             let ty_str = normalize_token_spacing(&quote::quote!(#ty).to_string());
             let expr_str = normalize_token_spacing(&quote::quote!(#expr).to_string());
@@ -551,7 +890,7 @@ fn process_item(item: &Item, base_dir: &Path, out: &mut String, level: usize) ->
             let docs = extract_doc_comments(attrs);
             if !docs.is_empty() {
                 let contract = parse_intent_contract(&docs);
-                format_intent_markdown(out, &contract, level);
+                format_intent_markdown(out, &contract, level, ctx);
             }
             let gen_str = normalize_token_spacing(&quote::quote!(#generics).to_string());
             let ty_str = normalize_token_spacing(&quote::quote!(#ty).to_string());
@@ -567,11 +906,13 @@ fn process_item(item: &Item, base_dir: &Path, out: &mut String, level: usize) ->
             attrs,
             ..
         }) => {
+            let struct_name = ident.to_string();
+            let scoped_ctx = ctx.with_type(&struct_name);
             out.push_str(&format!("{} `struct {}`\n\n", hashes, ident));
             let docs = extract_doc_comments(attrs);
             if !docs.is_empty() {
                 let contract = parse_intent_contract(&docs);
-                format_intent_markdown(out, &contract, level);
+                format_intent_markdown(out, &contract, level, &scoped_ctx);
             }
 
             match fields {
@@ -587,7 +928,11 @@ fn process_item(item: &Item, base_dir: &Path, out: &mut String, level: usize) ->
                             if f_doc.is_empty() {
                                 out.push_str(&format!("* `{}: {}`\n", f_name, f_ty));
                             } else {
-                                out.push_str(&format!("* `{}: {}` - {}\n", f_name, f_ty, f_doc));
+                                let resolved_doc = scoped_ctx.resolve_text(&f_doc);
+                                out.push_str(&format!(
+                                    "* `{}: {}` - {}\n",
+                                    f_name, f_ty, resolved_doc
+                                ));
                             }
                         }
                     }
@@ -614,11 +959,13 @@ fn process_item(item: &Item, base_dir: &Path, out: &mut String, level: usize) ->
             attrs,
             ..
         }) => {
+            let enum_name = ident.to_string();
+            let scoped_ctx = ctx.with_type(&enum_name);
             out.push_str(&format!("{} `enum {}`\n\n", hashes, ident));
             let docs = extract_doc_comments(attrs);
             if !docs.is_empty() {
                 let contract = parse_intent_contract(&docs);
-                format_intent_markdown(out, &contract, level);
+                format_intent_markdown(out, &contract, level, &scoped_ctx);
             }
 
             out.push_str("**Variants:**\n\n");
@@ -628,7 +975,8 @@ fn process_item(item: &Item, base_dir: &Path, out: &mut String, level: usize) ->
                 if v_doc.is_empty() {
                     out.push_str(&format!("* `{}`\n", v_name));
                 } else {
-                    out.push_str(&format!("* `{}` - {}\n", v_name, v_doc));
+                    let resolved_doc = scoped_ctx.resolve_text(&v_doc);
+                    out.push_str(&format!("* `{}` - {}\n", v_name, resolved_doc));
                 }
             }
             out.push('\n');
@@ -640,11 +988,13 @@ fn process_item(item: &Item, base_dir: &Path, out: &mut String, level: usize) ->
             attrs,
             ..
         }) => {
+            let trait_name = ident.to_string();
+            let scoped_ctx = ctx.with_type(&trait_name);
             out.push_str(&format!("{} `trait {}`\n\n", hashes, ident));
             let docs = extract_doc_comments(attrs);
             if !docs.is_empty() {
                 let contract = parse_intent_contract(&docs);
-                format_intent_markdown(out, &contract, level);
+                format_intent_markdown(out, &contract, level, &scoped_ctx);
             }
 
             out.push_str("**Methods:**\n\n");
@@ -656,7 +1006,8 @@ fn process_item(item: &Item, base_dir: &Path, out: &mut String, level: usize) ->
                     if m_docs.is_empty() {
                         out.push_str(&format!("* `{}`\n", sig));
                     } else {
-                        out.push_str(&format!("* `{}` - {}\n", sig, m_docs));
+                        let resolved_doc = scoped_ctx.resolve_text(&m_docs);
+                        out.push_str(&format!("* `{}` - {}\n", sig, resolved_doc));
                     }
                 }
             }
@@ -673,7 +1024,7 @@ fn process_item(item: &Item, base_dir: &Path, out: &mut String, level: usize) ->
             let docs = extract_doc_comments(attrs);
             if !docs.is_empty() {
                 let contract = parse_intent_contract(&docs);
-                format_intent_markdown(out, &contract, level);
+                format_intent_markdown(out, &contract, level, ctx);
             }
             let clean_sig = normalize_token_spacing(&quote::quote!(#sig).to_string());
             out.push_str(&format!("~~~rust\npub {}\n~~~\n\n", clean_sig));
@@ -688,6 +1039,7 @@ fn process_item(item: &Item, base_dir: &Path, out: &mut String, level: usize) ->
             ..
         }) => {
             let type_name = normalize_token_spacing(&quote::quote!(#self_ty).to_string());
+            let scoped_ctx = ctx.with_type(&type_name);
             let is_trait_impl = trait_.is_some();
             let impl_header = if let Some((_, tr, _)) = trait_ {
                 let tr_name = normalize_token_spacing(&quote::quote!(#tr).to_string());
@@ -709,7 +1061,7 @@ fn process_item(item: &Item, base_dir: &Path, out: &mut String, level: usize) ->
                         let docs = extract_doc_comments(&m.attrs);
                         if !docs.is_empty() {
                             let contract = parse_intent_contract(&docs);
-                            format_intent_markdown(out, &contract, level);
+                            format_intent_markdown(out, &contract, level, &scoped_ctx);
                         }
 
                         let vis_prefix = if is_trait_impl { "" } else { "pub " };
@@ -922,7 +1274,6 @@ fn execute_doc(args: DocArgs) -> Result<()> {
   } catch(e) {}
 
   function syncRustdocControls() {
-    // 1. Hide unwanted theme radio items in settings
     var hideRadios = ['dark', 'system preference'];
     hideRadios.forEach(function(val) {
       var r = document.querySelector('input[name="theme"][value="' + val + '"]');
@@ -932,7 +1283,6 @@ fn execute_doc(args: DocArgs) -> Result<()> {
       }
     });
 
-    // 2. Hide sub-theme choices
     var subSelectors = [
       '#preferred-light-theme',
       '#preferred-dark-theme',
@@ -946,7 +1296,6 @@ fn execute_doc(args: DocArgs) -> Result<()> {
       });
     });
 
-    // 3. Re-label ayu as dark in settings text
     var ayuRadio = document.querySelector('input[name="theme"][value="ayu"]');
     if (ayuRadio) {
       var label = document.querySelector('label[for="' + ayuRadio.id + '"]') || ayuRadio.closest('label') || ayuRadio.parentElement;
@@ -960,7 +1309,6 @@ fn execute_doc(args: DocArgs) -> Result<()> {
       }
     }
 
-    // 4. Hide toggle-all-docs if page has no collapsible sections
     var hasToggles = document.querySelector('details.toggle') !== null;
     var toggleBtn = document.getElementById('toggle-all-docs');
     if (toggleBtn) {
@@ -978,7 +1326,6 @@ fn execute_doc(args: DocArgs) -> Result<()> {
 })();
 </script>
 <style>
-  /* Settings styling: Hide redundant themes */
   input[name="theme"][value="system preference"],
   label:has(input[value="system preference"]),
   label[for*="system-preference"],
@@ -991,19 +1338,16 @@ fn execute_doc(args: DocArgs) -> Result<()> {
     display: none !important;
   }
 
-  /* FLIP RUSTDOC SUMMARY / SHOW ALL ICON DIRECTLY ON ::before */
   #toggle-all-docs::before {
     display: inline-block !important;
     transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1) !important;
     transform-origin: center center !important;
   }
 
-  /* When collapsed (Show all), rustdoc applies .will-expand: rotate 180deg */
   #toggle-all-docs.will-expand::before {
     transform: rotate(180deg) !important;
   }
 
-  /* Obsidian callout block styling for human-facing markdown docs */
   .docblock blockquote {
     border-left: 3px solid #ffb454 !important;
     background: rgba(255, 180, 84, 0.04) !important;
@@ -1013,7 +1357,6 @@ fn execute_doc(args: DocArgs) -> Result<()> {
 </style>"#;
     fs::write(&head_path, head_html)?;
 
-    // Obsidian top banner
     let banner_path = target_dir.join("banner.html");
     let banner_html = format!(
         r#"<!-- OBSIDIAN AYU TOPBAR -->
@@ -1333,7 +1676,6 @@ fn execute_build_site(args: BuildSiteArgs) -> Result<()> {
     let git_rev = compute_doc_revision(".", &["src/", "docs/", "README.md"])
         .unwrap_or_else(|_| "rev.clean".to_string());
 
-    // Synthesize autonomous agent documentation indexes across all workspace crates & sources
     println!("==> docversion: Generating llms.txt context index...");
     let raw_markdown_summary = generate_markdown_summary(&primary_name, Path::new("."))?;
     let markdown_summary = match args.format {
@@ -1344,18 +1686,15 @@ fn execute_build_site(args: BuildSiteArgs) -> Result<()> {
         }
     };
 
-    // 1. Root distribution level
     atomic_write(args.out_dir.join("llms.txt"), markdown_summary.as_bytes())?;
     atomic_write(
         args.out_dir.join("api-reference.md"),
         markdown_summary.as_bytes(),
     )?;
 
-    // 2. Versioned directory level (e.g. target/doc_site/v0.2.0/llms.txt)
     atomic_write(version_dir.join("llms.txt"), markdown_summary.as_bytes())?;
     atomic_write(latest_dir.join("llms.txt"), markdown_summary.as_bytes())?;
 
-    // 3. Copy rich-text RTF / Markdown to clipboard when --format shortcut is requested
     if args.format == DocFormat::Shortcut {
         copy_markdown_to_clipboard(&markdown_summary)?;
     }
@@ -1501,7 +1840,6 @@ fn patch_distribution_versions(dir: &Path, target_version: &str) -> Result<()> {
             if let Ok(content) = fs::read_to_string(&p) {
                 let mut updated = content.clone();
 
-                // 1. Topbar dropdown default option label
                 updated = replace_delimited(
                     &updated,
                     r#"class="hh-active-ver-label">"#,
@@ -1509,7 +1847,6 @@ fn patch_distribution_versions(dir: &Path, target_version: &str) -> Result<()> {
                     &format!("v{}", target_version),
                 );
 
-                // 2. Rustdoc sidebar crate version
                 updated = replace_delimited(
                     &updated,
                     r#"<span class="version">"#,
@@ -1524,7 +1861,6 @@ fn patch_distribution_versions(dir: &Path, target_version: &str) -> Result<()> {
                     target_version,
                 );
 
-                // 3. Obsolete badges
                 updated = replace_delimited(
                     &updated,
                     r#"<span>cargo-docversion v"#,
@@ -1747,17 +2083,24 @@ fn parse_intent_contract(doc_text: &str) -> IntentContract {
     contract
 }
 
-fn format_intent_markdown(out: &mut String, contract: &IntentContract, heading_level: usize) {
+fn format_intent_markdown(
+    out: &mut String,
+    contract: &IntentContract,
+    heading_level: usize,
+    ctx: &RenderContext<'_>,
+) {
     let subhashes = "#".repeat((heading_level + 1).min(6));
 
     if let Some(intent) = &contract.intent {
+        let resolved_intent = ctx.resolve_text(intent);
         out.push_str(&format!(
             "{} **Intent Directive**\n\n> {}\n\n",
             subhashes,
-            intent.replace('\n', "\n> ")
+            resolved_intent.replace('\n', "\n> ")
         ));
     } else if !contract.summary.is_empty() {
-        out.push_str(&format!("{}\n\n", contract.summary));
+        let resolved_summary = ctx.resolve_text(&contract.summary);
+        out.push_str(&format!("{}\n\n", resolved_summary));
     }
 
     for dt in &contract.doctests {
@@ -1767,7 +2110,7 @@ fn format_intent_markdown(out: &mut String, contract: &IntentContract, heading_l
     if !contract.guarantees.is_empty() {
         out.push_str(&format!("{} **Guarantees**\n\n", subhashes));
         for g in &contract.guarantees {
-            out.push_str(&format!("* [x] **Guarantee:** {}\n", g));
+            out.push_str(&format!("* [x] **Guarantee:** {}\n", ctx.resolve_text(g)));
         }
         out.push('\n');
     }
@@ -1783,7 +2126,7 @@ fn format_intent_markdown(out: &mut String, contract: &IntentContract, heading_l
     if !contract.non_goals.is_empty() {
         out.push_str(&format!("{} **Explicit Non-Goals**\n\n", subhashes));
         for ng in &contract.non_goals {
-            out.push_str(&format!("* ⛔ {}\n", ng));
+            out.push_str(&format!("* ⛔ {}\n", ctx.resolve_text(ng)));
         }
         out.push('\n');
     }
@@ -1791,7 +2134,7 @@ fn format_intent_markdown(out: &mut String, contract: &IntentContract, heading_l
     if !contract.notes.is_empty() {
         out.push_str(&format!("{} **Architectural Notes**\n\n", subhashes));
         for note in &contract.notes {
-            out.push_str(&format!("* 📝 {}\n", note));
+            out.push_str(&format!("* 📝 {}\n", ctx.resolve_text(note)));
         }
         out.push('\n');
     }
@@ -1858,7 +2201,7 @@ mod tests {
         let sample_lib = concat!(
             "//! <div class=\"banner\">Internal Header</div>\n",
             "//! See [Ledger](/latest/tuos/index.html) for details.<br/>\n",
-            "/// Verifies input items.\n",
+            "/// Verifies input items using [`BatchConfig`].\n",
             "/// ```rust\n",
             "/// let ok = verify(vec![1, 2]);\n",
             "/// ```\n",
@@ -1868,7 +2211,8 @@ mod tests {
             "        return Err(\"too many\".into());\n",
             "    }\n",
             "    Ok(())\n",
-            "}\n"
+            "}\n",
+            "pub struct BatchConfig;\n"
         );
         fs::write(src_dir.join("lib.rs"), sample_lib).expect("write temp lib.rs");
 
@@ -1881,6 +2225,7 @@ mod tests {
         assert!(!clean_md.contains("<div"));
         assert!(!clean_md.contains("<br/>"));
         assert!(clean_md.contains("[Ledger](./tuos.md)"));
+        assert!(clean_md.contains("[`BatchConfig`](#struct-batchconfig)"));
         assert!(
             clean_md.contains("pub fn verify<T: Ord>(items: Vec<T>) -> Result<(), String>"),
             "Actual generated markdown:\n{}",
@@ -1891,7 +2236,7 @@ mod tests {
     }
 
     #[test]
-    fn workspace_summary_scans_all_member_crates() {
+    fn workspace_summary_resolves_cross_crate_symbols() {
         let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR"))
             .parent()
             .and_then(Path::parent)
