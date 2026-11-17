@@ -1,6 +1,9 @@
 use std::fmt;
 use thiserror::Error;
 
+pub mod shortcut;
+pub use shortcut::{markdown_to_clean_html, sanitize_for_shortcut_docs};
+
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum CoreError {
     #[error("Invalid SemVer string: {0}")]
@@ -117,7 +120,7 @@ mod tests {
 
     #[test]
     fn test_empty_revision_handling() {
-        let v = VersionIdentifier::new("1.4.2", Some("   ")).unwrap();
+        let v = VersionIdentifier::new("1.4.2", Some("    ")).unwrap();
         assert_eq!(v.display_version(), "v1.4.2");
         assert!(v.revision_suffix.is_none());
     }

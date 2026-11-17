@@ -6,7 +6,7 @@
 [![Telemetry](https://img.shields.io/badge/telemetry-zero-brightgreen.svg)](#zero-telemetry)
 [![Rust](https://img.shields.io/badge/rust-1.78%2B-orange.svg)](Cargo.toml)
 
-A zero-telemetry, client-side toolkit and Cargo plugin for automated multi-version documentation bundling, LLM context synthesis (`llms.txt`), and deterministic database schema contract verification.
+A zero-telemetry, client-side toolkit and Cargo plugin for automated multi-version documentation bundling, universal polyglot LLM context synthesis (`llms.txt`), Shortcut Docs RTF/Markdown export, and reliable database schema contract verification.
 
 Designed for local-first systems, embedded ledgers, and privacy-focused teams who require reproducible documentation trees, autonomous agent context indexes, and strict migration contracts without external SaaS dependencies.
 
@@ -14,14 +14,16 @@ Designed for local-first systems, embedded ledgers, and privacy-focused teams wh
 
 ## Why hh-docversion?
 
-1. **Autonomous Agent Context (`llms.txt`)**: Automatically synthesizes single-file Markdown API indexes (`llms.txt` and `api-reference.md`) during site builds, capturing public interfaces, AST assertions, and explicit design contracts for LLM agents.
-2. **Intent & Invariant Extraction**: Parses intentional design contracts (`# Intent`, `# Guarantees`, `# Invariants`, `# Non-Goals`, `# Notes`) from doc comments and automatically extracts runtime invariant guards (`assert!`, `ensure!`, `return Err(...)`).
-3. **Obsidian-Themed Rustdoc Injection**: Injects a fixed, responsive topbar with active version switching, Git commit hashes, and an Obsidian Ayu aesthetic directly into `cargo doc` HTML without post-build tampering.
-4. **Subprocess-Free Git Inspection**: Queries commit history, tags, and revision hashes directly in-process via pure-Rust `gix`.
-5. **Versioned Docs Without SaaS**: Compiles version-segregated documentation trees (`/latest`, `/vX.Y.Z`, `versions.json`) with automatic root redirects for GitHub Pages, Cloudflare Pages, or static web servers.
-6. **Ecosystem-Agnostic Ingestion**: Works seamlessly with `cargo doc` or static output from `TypeDoc`, `VitePress`, `Sphinx`, `MkDocs`, and `Starlight`.
-7. **Deterministic DB Contracts**: Validates application SemVer boundaries against SQLite/DB migration matrix schemas (`schema_matrix.json`) and verifies cryptographic SHA-256 artifact checksums before application boot.
-8. **Zero Telemetry**: Completely offline, self-contained, and audit-friendly.
+1. **Autonomous Agent Context (`llms.txt`)**: Automatically synthesizes single-file Markdown API indexes (`llms.txt` and `api-reference.md`) during site builds across all workspace crates, capturing public interfaces, preserved doctests, AST assertions, and explicit design contracts for LLM agents.
+2. **Shortcut Docs Clean Markdown & RTF Clipboard Export**: Supports `--format shortcut` to strip raw HTML tags outside fenced code blocks, rewrite internal Rustdoc/versioned links into clean relative `.md` paths, render GFM tables and uniform-weight syntax-highlighted code blocks, and automatically load rich-text RTF onto your clipboard (`textutil`/`pbcopy` on macOS, with `wl-copy`, `xclip`, and `clip.exe` fallbacks) for instant `Cmd+V` paste into Shortcut Docs.
+3. **Universal Multi-Language Source Scanning**: Extracts public interfaces and docstrings across Cargo workspace crates (`.rs`) alongside TypeScript/JavaScript (`.ts`, `.tsx`, `.js`, `.jsx`), Python (`.py`), Go (`.go`), SQL (`.sql`), and authored `docs/**/*.md` guides into one unified index.
+4. **Intent & Invariant Extraction**: Parses intentional design contracts (`# Intent`, `# Guarantees`, `# Invariants`, `# Non-Goals`, `# Notes`) from doc comments and automatically extracts deduplicated runtime invariant guards (`assert!`, `ensure!`, `return Err(...)`).
+5. **Obsidian-Themed Rustdoc Injection**: Injects a fixed, responsive topbar with active version switching, Git commit hashes, and an Obsidian Ayu aesthetic directly into `cargo doc` HTML without post-build tampering.
+6. **Subprocess-Free Git Inspection**: Queries commit history, tags, and revision hashes directly in-process via pure-Rust `gix`.
+7. **Versioned Docs Without SaaS**: Compiles version-segregated documentation trees (`/latest`, `/vX.Y.Z`, `versions.json`) with automatic root redirects for GitHub Pages, Cloudflare Pages, or static web servers.
+8. **Ecosystem-Agnostic Ingestion**: Works seamlessly with `cargo doc` or static output from `TypeDoc`, `VitePress`, `Sphinx`, `MkDocs`, and `Starlight`.
+9. **Reliable DB Contracts**: Validates application SemVer boundaries against SQLite/DB migration matrix schemas (`schema_matrix.json`) and verifies cryptographic SHA-256 artifact checksums before application boot.
+10. **Zero Telemetry**: Completely offline, self-contained, and audit-friendly.
 
 ---
 
@@ -31,53 +33,48 @@ Designed for local-first systems, embedded ledgers, and privacy-focused teams wh
 
 Ensure you have a modern Rust toolchain installed (MSRV: **1.78+**):
 
-```bash
+~~~bash
 rustup update stable
-
-```
+~~~
 
 ### Option 1: Install from GitHub (Recommended)
 
 Install the latest release directly from GitHub into `~/.cargo/bin`:
 
-```bash
-cargo install --git [https://github.com/Hara-Horizon/hh-docversion.git](https://github.com/Hara-Horizon/hh-docversion.git) cargo-docversion
-
-```
+~~~bash
+cargo install --git https://github.com/Hara-Horizon/hh-docversion.git cargo-docversion
+~~~
 
 To pin to a specific release tag or commit SHA for reproducible CI pipelines:
 
-```bash
+~~~bash
 # Pin to a tagged release
-cargo install --git [https://github.com/Hara-Horizon/hh-docversion.git](https://github.com/Hara-Horizon/hh-docversion.git) --tag v0.1.0 cargo-docversion
+cargo install --git https://github.com/Hara-Horizon/hh-docversion.git --tag v0.1.0 cargo-docversion
 
 # Pin to a specific commit SHA
-cargo install --git [https://github.com/Hara-Horizon/hh-docversion.git](https://github.com/Hara-Horizon/hh-docversion.git) --rev <COMMIT_SHA> cargo-docversion
-
-```
+cargo install --git https://github.com/Hara-Horizon/hh-docversion.git --rev <COMMIT_SHA> cargo-docversion
+~~~
 
 ### Option 2: Build and Install from Local Source
 
 If you have cloned the repository locally:
 
-```bash
+~~~bash
 cargo install --path crates/cargo-docversion --force
+~~~
 
-```
-
-Both options install the standalone CLI (`docversion`) and the Cargo plugin (`cargo-docversion`) into `~/.cargo/bin`.
+Both options install the standalone CLI (`docversion`) and the Cargo plugin (`cargo-hh-docversion`) into `~/.cargo/bin`.
 
 ### Option 3: Use as a Library Dependency
 
 To integrate `docversion` engines into another Rust project:
 
-```toml
+~~~toml
 [dependencies]
-docversion-core = { git = "[https://github.com/Hara-Horizon/hh-docversion.git](https://github.com/Hara-Horizon/hh-docversion.git)", tag = "v0.1.0" }
-docversion-git = { git = "[https://github.com/Hara-Horizon/hh-docversion.git](https://github.com/Hara-Horizon/hh-docversion.git)", tag = "v0.1.0" }
-docversion-manifest = { git = "[https://github.com/Hara-Horizon/hh-docversion.git](https://github.com/Hara-Horizon/hh-docversion.git)", tag = "v0.1.0" }
-
-```
+docversion-core = { git = "https://github.com/Hara-Horizon/hh-docversion.git", tag = "v0.1.0" }
+docversion-git = { git = "https://github.com/Hara-Horizon/hh-docversion.git", tag = "v0.1.0" }
+docversion-manifest = { git = "https://github.com/Hara-Horizon/hh-docversion.git", tag = "v0.1.0" }
+~~~
 
 ---
 
@@ -85,40 +82,52 @@ docversion-manifest = { git = "[https://github.com/Hara-Horizon/hh-docversion.gi
 
 ### 1. Document & Bundle Multi-Version Rust Trees
 
-```bash
+~~~bash
 # Document workspace crates with injected Obsidian topbar and theme
-cargo docversion doc --no-deps
+cargo hh-docversion doc --no-deps
 
 # Assemble versioned distribution tree into target/doc_site and generate llms.txt
-cargo docversion build-site --out-dir target/doc_site
-
-```
+cargo hh-docversion build-site --out-dir target/doc_site
+~~~
 
 Or run the all-in-one pipeline:
 
-```bash
-cargo docversion site --out-dir target/doc_site
+~~~bash
+cargo hh-docversion site --out-dir target/doc_site
+~~~
 
-```
+### 2. Export Clean Markdown & Paste RTF into Shortcut Docs
 
-### 2. Autonomous Agent Context (`llms.txt`)
+Pass `--format shortcut` to `site` or `build-site` to strip raw HTML tags outside code fences, rewrite internal links into relative `.md` paths, write `target/doc_site/api-reference.md`, and automatically copy rich-text RTF (with GFM tables and syntax-highlighted code blocks) to your clipboard:
+
+~~~bash
+# All-in-one build with Shortcut Docs sanitization + automatic RTF clipboard copy
+cargo hh-docversion site --format shortcut --out-dir target/doc_site
+
+# Or sanitize and copy during standalone site assembly
+cargo hh-docversion build-site --format shortcut --out-dir target/doc_site
+~~~
+
+Open your target Shortcut Doc and press `Cmd+V` (`Ctrl+V` on Linux/Windows) to paste formatted headings, tables, blockquotes, and uniform-weight syntax-highlighted code blocks.
+
+### 3. Autonomous Agent Context (`llms.txt`)
 
 Every `build-site` run generates an agent-ready documentation bundle:
 
-* `target/doc_site/llms.txt`: Primary context file containing crate intent, module contracts, and public API interfaces.
-* `target/doc_site/api-reference.md`: Mirrored reference markdown.
-* `target/doc_site/vX.Y.Z/llms.txt`: Version-locked agent manifest.
+- `target/doc_site/llms.txt`: Primary context file containing workspace crate intent, module contracts, polyglot interfaces, and `docs/**/*.md` guides.
+- `target/doc_site/api-reference.md`: Mirrored reference Markdown (sanitized for Shortcut Docs when `--format shortcut` is enabled).
+- `target/doc_site/vX.Y.Z/llms.txt`: Version-locked agent manifest.
 
-### 3. Documenting Architectural Intent & Contracts
+### 4. Documenting Architectural Intent & Contracts
 
 Document your modules and types using clean markdown or blockquote tags. `hh-docversion` parses them for agents in `llms.txt` while rendering styled callouts for human readers in Rustdoc:
 
-```rust
+~~~rust
 //! # Stage 04: Tuos
 //! Double-entry transactional reconciliation engine.
 //!
 //! > **🎯 INTENT**  
-//! > Guarantees absolute deterministic ledger accounting and verification. Tuos acts as 
+//! > Guarantees exact ledger accounting and verification. Tuos acts as 
 //! > the terminal validator for financial events before persistent journal serialization.
 //!
 //! > **🛡️ INVARIANT**  
@@ -130,16 +139,15 @@ Document your modules and types using clean markdown or blockquote tags. `hh-doc
 //!
 //! > **📝 NOTE**  
 //! > Replay integrity relies on uncorrupted cryptographic hash chains.
-
-```
+~~~
 
 `docversion` automatically extracts both your declared invariants and your code-level runtime assertions (`assert!`, `ensure!`, `Err(...)` returns) into a structured manifest:
 
-```markdown
+~~~markdown
 ### `struct JournalBatch`
 
 #### **Intent Directive**
-> Guarantees absolute deterministic ledger accounting and verification.
+> Guarantees exact ledger accounting and verification.
 
 #### **System Invariants**
 - 🛡️ `Zero-sum debit and credit balances across every committed journal transaction.`
@@ -148,30 +156,27 @@ Document your modules and types using clean markdown or blockquote tags. `hh-doc
 #### **Programmatic Invariants & Rejection Boundaries**
 - 🔒 `assert_eq`: `debit_total == credit_total`
 - 🚫 Reject: `Err(HaraError::Validation("Zero-amount transaction rejected"))`
+~~~
 
-```
+### 5. Ingest External Docs (TypeDoc, VitePress, etc.)
 
-### 4. Ingest External Docs (TypeDoc, VitePress, etc.)
-
-```bash
-docversion build-site \
+~~~bash
+cargo hh-docversion build-site \
   --source docs/dist \
   --version 1.0.0 \
   --entry-page index.html \
   --out-dir public_site
+~~~
 
-```
+### 6. Verify Database Schema Contracts
 
-### 5. Verify Database Schema Contracts
-
-```bash
-docversion verify-db \
+~~~bash
+cargo hh-docversion verify-db \
   --manifest schema_matrix.json \
   --schema core-ledger \
   --db-version 1 \
   --app-version 0.1.0
-
-```
+~~~
 
 ---
 
@@ -179,16 +184,15 @@ docversion verify-db \
 
 The repository includes a two-tiered `.githooks/` suite optimized for high-velocity micro-commits:
 
-* **pre-commit (Sub-second)**: Runs `cargo check --workspace --quiet` and JSON structure verification. Keeps micro-commits instant.
-* **pre-push (Gatekeeper)**: Runs `cargo test --workspace` and `cargo clippy --workspace --all-targets -- -D warnings` prior to branch pushes.
+- **pre-commit (Sub-second)**: Runs `cargo check --workspace --quiet` and JSON structure verification. Keeps micro-commits instant.
+- **pre-push (Gatekeeper)**: Runs `cargo test --workspace` and `cargo clippy --workspace --all-targets -- -D warnings` prior to branch pushes.
 
 ### Activate Hooks
 
-```bash
+~~~bash
 git config core.hooksPath .githooks
 chmod +x .githooks/pre-commit .githooks/pre-push
-
-```
+~~~
 
 ---
 
@@ -196,7 +200,7 @@ chmod +x .githooks/pre-commit .githooks/pre-push
 
 Licensed under either of:
 
-* Apache License, Version 2.0 ([LICENSE-APACHE](https://www.google.com/search?q=LICENSE-APACHE))
-* MIT License ([LICENSE-MIT](https://www.google.com/search?q=LICENSE-MIT))
+- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE))
+- MIT License ([LICENSE-MIT](LICENSE-MIT))
 
 `hh-docversion` is open-sourced as community-maintained infrastructure. Contributions, issues, and discussions are welcome.

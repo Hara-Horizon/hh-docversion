@@ -4,17 +4,58 @@ use std::process::Command;
 
 use anyhow::{bail, Context, Result};
 use cargo_metadata::MetadataCommand;
-use clap::{Args, Parser, Subcommand};
-use docversion_core::{generate_redirect_html, VersionIdentifier};
+use clap::{Args, Parser, Subcommand, ValueEnum};
+use docversion_core::{generate_redirect_html, sanitize_for_shortcut_docs, VersionIdentifier};
 use docversion_git::compute_doc_revision;
 use docversion_manifest::SchemaMatrix;
 use serde::{Deserialize, Serialize};
 
 use syn::visit::{self, Visit};
 use syn::{
-    Expr, ExprCall, ExprMacro, ExprReturn, Fields, ImplItem, Item, ItemEnum, ItemFn, ItemImpl,
-    ItemMod, ItemStruct, ItemTrait, Visibility,
+    ExprCall, ExprMacro, Fields, ImplItem, Item, ItemConst, ItemEnum, ItemFn, ItemImpl, ItemMod,
+    ItemStruct, ItemTrait, ItemType, Visibility,
 };
+
+/// Normalizes `quote!` token strings into clean, idiomatic code formatting.
+fn normalize_token_spacing(raw: &str) -> String {
+    let mut s = raw.split_whitespace().collect::<Vec<_>>().join(" ");
+    for (pat, rep) in [
+        (" :: ", "::"),
+        (":: ", "::"),
+        (" ::", "::"),
+        (" < ", "<"),
+        ("< ", "<"),
+        (" <", "<"),
+        (" > ", "> "),
+        (" >", ">"),
+        (" ( ", "("),
+        ("( ", "("),
+        (" (", "("),
+        (" ) ", ") "),
+        (" )", ")"),
+        (" [ ", "["),
+        ("[ ", "["),
+        (" [", "["),
+        (" ]", "]"),
+        (" ,", ","),
+        (" ;", ";"),
+        (" :", ":"),
+        ("& ", "&"),
+        ("->(", "-> ("),
+        (":(", ": ("),
+        ("fn(", "fn ("),
+        ("for(", "for ("),
+        ("if(", "if ("),
+        ("while(", "while ("),
+        ("match(", "match ("),
+        ("in(", "in ("),
+    ] {
+        while s.contains(pat) {
+            s = s.replace(pat, rep);
+        }
+    }
+    s
+}
 
 /// Extracts doc comments (`///` or `//!`) from attributes.
 fn extract_doc_comments(attrs: &[syn::Attribute]) -> String {
@@ -35,11 +76,15 @@ fn extract_doc_comments(attrs: &[syn::Attribute]) -> String {
     docs.join("\n")
 }
 
-/// Recursively scans Rust source files and renders public interfaces to Markdown.
-pub fn generate_markdown_summary(crate_name: &str, crate_root: &Path) -> Result<String> {
-    let mut out = String::new();
-    out.push_str(&format!("# {}\n\n", crate_name));
-    out.push_str("> Autonomous Agent API Context & Single-File Documentation Index\n\n");
+/// Scans a single crate root (`src/lib.rs` or `src/main.rs`) and appends its public API markdown.
+fn scan_crate_root(
+    crate_name: &str,
+    crate_root: &Path,
+    out: &mut String,
+    crate_heading_level: usize,
+) -> Result<()> {
+    let hashes = "#".repeat(crate_heading_level.min(6));
+    out.push_str(&format!("---\n\n{} Crate `{}`\n\n", hashes, crate_name));
 
     let src_dir = crate_root.join("src");
     let lib_rs = src_dir.join("lib.rs");
@@ -50,11 +95,234 @@ pub fn generate_markdown_summary(crate_name: &str, crate_root: &Path) -> Result<
     } else if main_rs.exists() {
         main_rs
     } else {
-        return Ok(out);
+        return Ok(());
     };
 
-    scan_file(&entry_file, &src_dir, &mut out, 2)?;
+    scan_file(&entry_file, &src_dir, out, crate_heading_level + 1)
+}
+
+/// Recursively scans Rust crates, Markdown documentation (`docs/*.md`), and multi-language
+/// public interfaces (`.ts`, `.tsx`, `.js`, `.py`, `.go`, `.sql`) into a unified Markdown index.
+pub fn generate_markdown_summary(workspace_title: &str, crate_root: &Path) -> Result<String> {
+    let mut out = String::new();
+    out.push_str(&format!("# {}\n\n", workspace_title));
+    out.push_str("> Autonomous Agent API Context & Single-File Documentation Index\n\n");
+
+    let mut scanned_rust_workspace = false;
+    let manifest_path = crate_root.join("Cargo.toml");
+    if manifest_path.exists() {
+        if let Ok(metadata) = MetadataCommand::new()
+            .manifest_path(&manifest_path)
+            .no_deps()
+            .exec()
+        {
+            let mut packages = metadata.workspace_packages();
+            packages.sort_by(|a, b| a.name.cmp(&b.name));
+
+            if !packages.is_empty() {
+                for pkg in packages {
+                    if let Some(pkg_dir) = pkg.manifest_path.parent() {
+                        scan_crate_root(&pkg.name, pkg_dir.as_std_path(), &mut out, 2)?;
+                    }
+                }
+                scanned_rust_workspace = true;
+            }
+        }
+    }
+
+    if !scanned_rust_workspace {
+        // Fallback for standalone Rust source directories without a Cargo.toml
+        let src_dir = crate_root.join("src");
+        let lib_rs = src_dir.join("lib.rs");
+        let main_rs = src_dir.join("main.rs");
+
+        if lib_rs.exists() {
+            scan_file(&lib_rs, &src_dir, &mut out, 2)?;
+        } else if main_rs.exists() {
+            scan_file(&main_rs, &src_dir, &mut out, 2)?;
+        }
+    }
+
+    // Universal multi-language source scanner (.ts, .tsx, .js, .py, .go, .sql)
+    scan_universal_sources(crate_root, crate_root, &mut out)?;
+
+    // Documentation directory Markdown ingestion (docs/**/*.md)
+    let docs_dir = crate_root.join("docs");
+    if docs_dir.is_dir() {
+        scan_markdown_docs(&docs_dir, crate_root, &mut out)?;
+    }
+
     Ok(out)
+}
+
+/// Walks `root` for non-Rust source files and extracts public interfaces + docstrings.
+fn scan_universal_sources(dir: &Path, workspace_root: &Path, out: &mut String) -> Result<()> {
+    if !dir.is_dir() {
+        return Ok(());
+    }
+    let mut entries: Vec<_> = fs::read_dir(dir)?.filter_map(|e| e.ok()).collect();
+    entries.sort_by_key(|e| e.file_name());
+
+    for entry in entries {
+        let path = entry.path();
+        let name = entry.file_name();
+        let name_str = name.to_string_lossy();
+
+        if path.is_dir() {
+            if matches!(
+                name_str.as_ref(),
+                "target" | "node_modules" | ".git" | ".venv" | "venv" | "__pycache__" | "dist"
+            ) {
+                continue;
+            }
+            scan_universal_sources(&path, workspace_root, out)?;
+        } else if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+            let lang = match ext {
+                "ts" | "tsx" => Some("typescript"),
+                "js" | "jsx" => Some("javascript"),
+                "py" => Some("python"),
+                "go" => Some("go"),
+                "sql" => Some("sql"),
+                _ => None,
+            };
+            if let Some(lang_tag) = lang {
+                let rel = path.strip_prefix(workspace_root).unwrap_or(&path);
+                let content = fs::read_to_string(&path).unwrap_or_default();
+                let decls = extract_universal_declarations(&content, lang_tag);
+                if !decls.is_empty() {
+                    out.push_str(&format!("---\n\n## File `{}`\n\n", rel.display()));
+                    for (doc, sig) in decls {
+                        if !doc.is_empty() {
+                            out.push_str(&format!("{}\n\n", doc));
+                        }
+                        out.push_str(&format!("~~~{}\n{}\n~~~\n\n", lang_tag, sig));
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Extracts top-level exported/public declarations and preceding docstrings across TS/JS, Python, Go, and SQL.
+fn extract_universal_declarations(content: &str, lang: &str) -> Vec<(String, String)> {
+    let mut results = Vec::new();
+    let lines: Vec<&str> = content.lines().collect();
+
+    for (idx, line) in lines.iter().enumerate() {
+        let trimmed = line.trim();
+        let is_decl = match lang {
+            "typescript" | "javascript" => {
+                trimmed.starts_with("export function ")
+                    || trimmed.starts_with("export async function ")
+                    || trimmed.starts_with("export interface ")
+                    || trimmed.starts_with("export type ")
+                    || trimmed.starts_with("export class ")
+                    || trimmed.starts_with("export enum ")
+            }
+            "python" => {
+                (line.starts_with("def ")
+                    || line.starts_with("async def ")
+                    || line.starts_with("class "))
+                    && !trimmed.starts_with("def _")
+                    && !trimmed.starts_with("async def _")
+            }
+            "go" => {
+                (trimmed.starts_with("func ") || trimmed.starts_with("type "))
+                    && is_go_exported_decl(trimmed)
+            }
+            "sql" => {
+                let upper = trimmed.to_ascii_uppercase();
+                upper.starts_with("CREATE TABLE ")
+                    || upper.starts_with("CREATE VIEW ")
+                    || upper.starts_with("CREATE INDEX ")
+            }
+            _ => false,
+        };
+
+        if is_decl {
+            let mut doc_lines = Vec::new();
+            let mut back = idx;
+            while back > 0 {
+                back -= 1;
+                let prev = lines[back].trim();
+                if let Some(comment) = prev
+                    .strip_prefix("///")
+                    .or_else(|| prev.strip_prefix("//"))
+                    .or_else(|| prev.strip_prefix('#'))
+                    .or_else(|| prev.strip_prefix("--"))
+                    .or_else(|| prev.strip_prefix('*'))
+                {
+                    let cleaned = comment.trim_end_matches("*/").trim();
+                    if !cleaned.is_empty() {
+                        doc_lines.push(cleaned.to_string());
+                    }
+                } else if prev == "/**" || prev == "/*" {
+                    continue;
+                } else {
+                    break;
+                }
+            }
+            doc_lines.reverse();
+
+            // Capture multi-line SQL statement up to `;` or clean signature line
+            let sig = if lang == "sql" {
+                let mut stmt = Vec::new();
+                for future_line in &lines[idx..] {
+                    stmt.push(future_line.trim_end());
+                    if future_line.contains(';') {
+                        break;
+                    }
+                }
+                stmt.join("\n")
+            } else {
+                trimmed.trim_end_matches('{').trim().to_string()
+            };
+
+            results.push((doc_lines.join(" "), sig));
+        }
+    }
+
+    results
+}
+
+fn is_go_exported_decl(trimmed: &str) -> bool {
+    let after_kw = trimmed
+        .strip_prefix("func ")
+        .or_else(|| trimmed.strip_prefix("type "))
+        .unwrap_or("");
+    // Skip receiver `(r *Receiver) ` if present
+    let ident_part = if let Some(after_recv) = after_kw.strip_prefix('(') {
+        after_recv
+            .split_once(')')
+            .map(|(_, rest)| rest.trim_start())
+            .unwrap_or(after_kw)
+    } else {
+        after_kw
+    };
+    ident_part.chars().next().is_some_and(|c| c.is_ascii_uppercase())
+}
+
+/// Appends authored Markdown files from `docs/` into the single-file bundle.
+fn scan_markdown_docs(dir: &Path, workspace_root: &Path, out: &mut String) -> Result<()> {
+    let mut entries: Vec<_> = fs::read_dir(dir)?.filter_map(|e| e.ok()).collect();
+    entries.sort_by_key(|e| e.file_name());
+
+    for entry in entries {
+        let path = entry.path();
+        if path.is_dir() {
+            scan_markdown_docs(&path, workspace_root, out)?;
+        } else if path.extension().is_some_and(|ext| ext == "md") {
+            let rel = path.strip_prefix(workspace_root).unwrap_or(&path);
+            let content = fs::read_to_string(&path).unwrap_or_default();
+            if !content.trim().is_empty() {
+                out.push_str(&format!("---\n\n## Guide `{}`\n\n", rel.display()));
+                out.push_str(content.trim());
+                out.push_str("\n\n");
+            }
+        }
+    }
+    Ok(())
 }
 
 fn scan_file(
@@ -127,61 +395,45 @@ impl<'ast> Visit<'ast> for AssertionVisitor {
                 "assert" | "assert_eq" | "assert_ne" | "ensure" | "debug_assert"
             ) {
                 let tokens = node.mac.tokens.to_string();
-                let clean = tokens
-                    .split('\n')
-                    .map(str::trim)
-                    .collect::<Vec<_>>()
-                    .join(" ");
-                self.assertions.push(ExtractedAssertion {
-                    kind: InvariantKind::Assert(name),
-                    condition: clean,
-                });
+                let clean = normalize_token_spacing(&tokens);
+                if !self
+                    .assertions
+                    .iter()
+                    .any(|a| matches!(&a.kind, InvariantKind::Assert(k) if k == &name) && a.condition == clean)
+                {
+                    self.assertions.push(ExtractedAssertion {
+                        kind: InvariantKind::Assert(name),
+                        condition: clean,
+                    });
+                }
             }
         }
         visit::visit_expr_macro(self, node);
     }
 
-    fn visit_expr_return(&mut self, node: &'ast ExprReturn) {
-        if let Some(expr) = &node.expr {
-            if let Some(err_desc) = match_err_expression(expr) {
+    fn visit_expr_call(&mut self, node: &'ast ExprCall) {
+        if let Some(err_desc) = match_err_call(node) {
+            if !self
+                .assertions
+                .iter()
+                .any(|a| matches!(a.kind, InvariantKind::ErrorRejection) && a.condition == err_desc)
+            {
                 self.assertions.push(ExtractedAssertion {
                     kind: InvariantKind::ErrorRejection,
                     condition: err_desc,
                 });
             }
         }
-        visit::visit_expr_return(self, node);
-    }
-
-    fn visit_expr_call(&mut self, node: &'ast ExprCall) {
-        if let Some(err_desc) = match_err_call(node) {
-            self.assertions.push(ExtractedAssertion {
-                kind: InvariantKind::ErrorRejection,
-                condition: err_desc,
-            });
-        }
         visit::visit_expr_call(self, node);
     }
 }
 
-fn match_err_expression(expr: &Expr) -> Option<String> {
-    match expr {
-        Expr::Call(call) => match_err_call(call),
-        _ => None,
-    }
-}
-
 fn match_err_call(call: &ExprCall) -> Option<String> {
-    if let Expr::Path(p) = &*call.func {
+    if let syn::Expr::Path(p) = &*call.func {
         if let Some(seg) = p.path.segments.last() {
             if seg.ident == "Err" {
                 let tokens = quote::quote!(#call).to_string();
-                let clean = tokens
-                    .split('\n')
-                    .map(str::trim)
-                    .collect::<Vec<_>>()
-                    .join(" ");
-                return Some(clean);
+                return Some(normalize_token_spacing(&tokens));
             }
         }
     }
@@ -266,6 +518,48 @@ fn process_item(item: &Item, base_dir: &Path, out: &mut String, level: usize) ->
                 }
             }
         }
+        Item::Const(ItemConst {
+            vis: Visibility::Public(_),
+            ident,
+            ty,
+            expr,
+            attrs,
+            ..
+        }) => {
+            out.push_str(&format!("{} `const {}`\n\n", hashes, ident));
+            let docs = extract_doc_comments(attrs);
+            if !docs.is_empty() {
+                let contract = parse_intent_contract(&docs);
+                format_intent_markdown(out, &contract, level);
+            }
+            let ty_str = normalize_token_spacing(&quote::quote!(#ty).to_string());
+            let expr_str = normalize_token_spacing(&quote::quote!(#expr).to_string());
+            out.push_str(&format!(
+                "~~~rust\npub const {}: {} = {};\n~~~\n\n",
+                ident, ty_str, expr_str
+            ));
+        }
+        Item::Type(ItemType {
+            vis: Visibility::Public(_),
+            ident,
+            generics,
+            ty,
+            attrs,
+            ..
+        }) => {
+            out.push_str(&format!("{} `type {}`\n\n", hashes, ident));
+            let docs = extract_doc_comments(attrs);
+            if !docs.is_empty() {
+                let contract = parse_intent_contract(&docs);
+                format_intent_markdown(out, &contract, level);
+            }
+            let gen_str = normalize_token_spacing(&quote::quote!(#generics).to_string());
+            let ty_str = normalize_token_spacing(&quote::quote!(#ty).to_string());
+            out.push_str(&format!(
+                "~~~rust\npub type {}{} = {};\n~~~\n\n",
+                ident, gen_str, ty_str
+            ));
+        }
         Item::Struct(ItemStruct {
             vis: Visibility::Public(_),
             ident,
@@ -287,7 +581,8 @@ fn process_item(item: &Item, base_dir: &Path, out: &mut String, level: usize) ->
                         if let Visibility::Public(_) = f.vis {
                             let f_name =
                                 f.ident.as_ref().map(|i| i.to_string()).unwrap_or_default();
-                            let f_ty = quote::quote!(#f.ty).to_string();
+                            let f_ty_raw = &f.ty;
+                            let f_ty = normalize_token_spacing(&quote::quote!(#f_ty_raw).to_string());
                             let f_doc = extract_doc_comments(&f.attrs);
                             if f_doc.is_empty() {
                                 out.push_str(&format!("* `{}: {}`\n", f_name, f_ty));
@@ -302,7 +597,10 @@ fn process_item(item: &Item, base_dir: &Path, out: &mut String, level: usize) ->
                     let tuple_types: Vec<_> = unnamed
                         .unnamed
                         .iter()
-                        .map(|f| quote::quote!(#f.ty).to_string())
+                        .map(|f| {
+                            let ty = &f.ty;
+                            normalize_token_spacing(&quote::quote!(#ty).to_string())
+                        })
                         .collect();
                     out.push_str(&format!("Tuple Struct: `({})`\n\n", tuple_types.join(", ")));
                 }
@@ -352,7 +650,8 @@ fn process_item(item: &Item, base_dir: &Path, out: &mut String, level: usize) ->
             out.push_str("**Methods:**\n\n");
             for ti in items {
                 if let syn::TraitItem::Fn(m) = ti {
-                    let sig = quote::quote!(#m.sig).to_string();
+                    let m_sig = &m.sig;
+                    let sig = normalize_token_spacing(&quote::quote!(#m_sig).to_string());
                     let m_docs = extract_doc_comments(&m.attrs);
                     if m_docs.is_empty() {
                         out.push_str(&format!("* `{}`\n", sig));
@@ -376,7 +675,8 @@ fn process_item(item: &Item, base_dir: &Path, out: &mut String, level: usize) ->
                 let contract = parse_intent_contract(&docs);
                 format_intent_markdown(out, &contract, level);
             }
-            out.push_str(&format!("```rust\n{}\n```\n\n", quote::quote!(#sig)));
+            let clean_sig = normalize_token_spacing(&quote::quote!(#sig).to_string());
+            out.push_str(&format!("~~~rust\npub {}\n~~~\n\n", clean_sig));
 
             let assertions = extract_block_assertions(block);
             format_assertions_markdown(out, &assertions, level);
@@ -387,24 +687,33 @@ fn process_item(item: &Item, base_dir: &Path, out: &mut String, level: usize) ->
             trait_,
             ..
         }) => {
-            let type_name = quote::quote!(#self_ty).to_string();
+            let type_name = normalize_token_spacing(&quote::quote!(#self_ty).to_string());
+            let is_trait_impl = trait_.is_some();
             let impl_header = if let Some((_, tr, _)) = trait_ {
-                format!("impl {} for {}", quote::quote!(#tr), type_name)
+                let tr_name = normalize_token_spacing(&quote::quote!(#tr).to_string());
+                format!("impl {} for {}", tr_name, type_name)
             } else {
                 format!("impl {}", type_name)
             };
 
             for impl_item in items {
                 if let ImplItem::Fn(m) = impl_item {
-                    if let Visibility::Public(_) = m.vis {
-                        let sig_str = quote::quote!(#m.sig).to_string();
-                        out.push_str(&format!("{} `{}` ({})\n\n", hashes, sig_str, impl_header));
+                    if is_trait_impl || matches!(m.vis, Visibility::Public(_)) {
+                        let m_sig = &m.sig;
+                        let sig_str = normalize_token_spacing(&quote::quote!(#m_sig).to_string());
+                        out.push_str(&format!(
+                            "{} `fn {}` ({})\n\n",
+                            hashes, m.sig.ident, impl_header
+                        ));
 
                         let docs = extract_doc_comments(&m.attrs);
                         if !docs.is_empty() {
                             let contract = parse_intent_contract(&docs);
                             format_intent_markdown(out, &contract, level);
                         }
+
+                        let vis_prefix = if is_trait_impl { "" } else { "pub " };
+                        out.push_str(&format!("~~~rust\n{}{}\n~~~\n\n", vis_prefix, sig_str));
 
                         let assertions = extract_block_assertions(&m.block);
                         format_assertions_markdown(out, &assertions, level);
@@ -462,6 +771,14 @@ pub enum Commands {
     Site(SiteArgs),
 }
 
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum DocFormat {
+    /// Standard site bundle (Rustdoc HTML + llms.txt + api-reference.md)
+    Standard,
+    /// Clean Markdown sanitized for Shortcut Docs import (strips raw HTML, rewrites relative .md links)
+    Shortcut,
+}
+
 #[derive(Args, Debug)]
 pub struct DocArgs {
     /// Skip documenting dependent crates
@@ -494,6 +811,10 @@ pub struct BuildSiteArgs {
     /// Output directory for bundled distribution
     #[arg(long, default_value = "target/doc_site")]
     pub out_dir: PathBuf,
+
+    /// Output format mode
+    #[arg(long, value_enum, default_value_t = DocFormat::Standard)]
+    pub format: DocFormat,
 }
 
 #[derive(Args, Debug)]
@@ -524,6 +845,10 @@ pub struct SiteArgs {
     /// Output directory for bundled distribution
     #[arg(long, default_value = "target/doc_site")]
     pub out_dir: PathBuf,
+
+    /// Output format mode
+    #[arg(long, value_enum, default_value_t = DocFormat::Standard)]
+    pub format: DocFormat,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -941,6 +1266,7 @@ fn execute_site(args: SiteArgs) -> Result<()> {
         version: None,
         entry_page: "index.html".to_string(),
         out_dir: args.out_dir,
+        format: args.format,
     })
 }
 
@@ -1006,9 +1332,17 @@ fn execute_build_site(args: BuildSiteArgs) -> Result<()> {
 
     let git_rev = compute_doc_revision(".", &["src/", "docs/", "README.md"])
         .unwrap_or_else(|_| "rev.clean".to_string());
-    // Synthesize autonomous agent documentation indexes
+
+    // Synthesize autonomous agent documentation indexes across all workspace crates & sources
     println!("==> docversion: Generating llms.txt context index...");
-    let markdown_summary = generate_markdown_summary(&primary_name, Path::new("."))?;
+    let raw_markdown_summary = generate_markdown_summary(&primary_name, Path::new("."))?;
+    let markdown_summary = match args.format {
+        DocFormat::Standard => raw_markdown_summary,
+        DocFormat::Shortcut => {
+            println!("==> docversion: Sanitizing Markdown for Shortcut Docs export...");
+            sanitize_for_shortcut_docs(&raw_markdown_summary)
+        }
+    };
 
     // 1. Root distribution level
     atomic_write(args.out_dir.join("llms.txt"), markdown_summary.as_bytes())?;
@@ -1020,6 +1354,11 @@ fn execute_build_site(args: BuildSiteArgs) -> Result<()> {
     // 2. Versioned directory level (e.g. target/doc_site/v0.2.0/llms.txt)
     atomic_write(version_dir.join("llms.txt"), markdown_summary.as_bytes())?;
     atomic_write(latest_dir.join("llms.txt"), markdown_summary.as_bytes())?;
+
+    // 3. Copy rich-text RTF / Markdown to clipboard when --format shortcut is requested
+    if args.format == DocFormat::Shortcut {
+        copy_markdown_to_clipboard(&markdown_summary)?;
+    }
 
     let manifest_path = args.out_dir.join("versions.json");
     let mut versions: Vec<SiteManifestEntry> = if manifest_path.exists() {
@@ -1066,6 +1405,83 @@ fn execute_build_site(args: BuildSiteArgs) -> Result<()> {
         args.out_dir.display()
     );
 
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn copy_markdown_to_clipboard(markdown: &str) -> Result<()> {
+    use std::io::Write;
+    use std::process::Stdio;
+
+    let html = docversion_core::markdown_to_clean_html(markdown);
+
+    let mut textutil = Command::new("/usr/bin/textutil")
+        .args(["-stdin", "-format", "html", "-convert", "rtf", "-stdout"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .context("Failed to spawn /usr/bin/textutil")?;
+
+    if let Some(mut stdin) = textutil.stdin.take() {
+        stdin.write_all(html.as_bytes())?;
+    }
+
+    let rtf_output = textutil.wait_with_output()?;
+    if !rtf_output.status.success() {
+        bail!("textutil failed to convert HTML to RTF");
+    }
+
+    let mut pbcopy = Command::new("/usr/bin/pbcopy")
+        .stdin(Stdio::piped())
+        .spawn()
+        .context("Failed to spawn /usr/bin/pbcopy")?;
+
+    if let Some(mut stdin) = pbcopy.stdin.take() {
+        stdin.write_all(&rtf_output.stdout)?;
+    }
+
+    let copy_status = pbcopy.wait()?;
+    if !copy_status.success() {
+        bail!("pbcopy failed with exit code: {:?}", copy_status.code());
+    }
+
+    println!("==> docversion: Rich-text RTF copied to clipboard — press Cmd+V in Shortcut Docs.");
+    Ok(())
+}
+
+#[cfg(not(target_os = "macos"))]
+fn copy_markdown_to_clipboard(markdown: &str) -> Result<()> {
+    use std::io::Write;
+    use std::process::Stdio;
+
+    let candidates: &[(&str, &[&str])] = &[
+        ("wl-copy", &[]),
+        ("xclip", &["-selection", "clipboard"]),
+        ("clip.exe", &[]),
+    ];
+
+    for (bin, args) in candidates {
+        if let Ok(mut child) = Command::new(bin)
+            .args(*args)
+            .stdin(Stdio::piped())
+            .spawn()
+        {
+            if let Some(mut stdin) = child.stdin.take() {
+                let _ = stdin.write_all(markdown.as_bytes());
+            }
+            if child.wait().is_ok_and(|s| s.success()) {
+                println!(
+                    "==> docversion: Sanitized Markdown copied via {} — paste into Shortcut Docs.",
+                    bin
+                );
+                return Ok(());
+            }
+        }
+    }
+
+    println!(
+        "==> docversion: No system clipboard utility found; read target/doc_site/api-reference.md directly."
+    );
     Ok(())
 }
 
@@ -1252,10 +1668,11 @@ fn atomic_write<P: AsRef<Path>>(path: P, data: &[u8]) -> Result<()> {
     Ok(())
 }
 
-/// Parsed intentional sections from doc comments.
+/// Parsed intentional sections and preserved doctest blocks from doc comments.
 #[derive(Default, Debug)]
 struct IntentContract {
     summary: String,
+    doctests: Vec<String>,
     intent: Option<String>,
     guarantees: Vec<String>,
     invariants: Vec<String>,
@@ -1266,10 +1683,34 @@ struct IntentContract {
 fn parse_intent_contract(doc_text: &str) -> IntentContract {
     let mut contract = IntentContract::default();
     let mut target: Option<&mut Vec<String>> = None;
+    let mut in_fence = false;
+    let mut current_fence = String::new();
 
     for line in doc_text.lines() {
-        let clean = line
-            .trim()
+        let trimmed_raw = line.trim();
+        if trimmed_raw.starts_with("```") || trimmed_raw.starts_with("~~~") {
+            if !in_fence {
+                in_fence = true;
+                current_fence.clear();
+                let lang = trimmed_raw.trim_start_matches(['`', '~']).trim();
+                let lang_tag = if lang.is_empty() { "rust" } else { lang };
+                current_fence.push_str(&format!("~~~{}\n", lang_tag));
+            } else {
+                in_fence = false;
+                current_fence.push_str("~~~");
+                contract.doctests.push(current_fence.clone());
+                current_fence.clear();
+            }
+            continue;
+        }
+
+        if in_fence {
+            current_fence.push_str(line);
+            current_fence.push('\n');
+            continue;
+        }
+
+        let clean = trimmed_raw
             .trim_start_matches(['>', '#', '*', '-', ' '])
             .trim();
         let lower = clean.to_lowercase();
@@ -1319,6 +1760,10 @@ fn format_intent_markdown(out: &mut String, contract: &IntentContract, heading_l
         out.push_str(&format!("{}\n\n", contract.summary));
     }
 
+    for dt in &contract.doctests {
+        out.push_str(&format!("{}\n\n", dt));
+    }
+
     if !contract.guarantees.is_empty() {
         out.push_str(&format!("{} **Guarantees**\n\n", subhashes));
         for g in &contract.guarantees {
@@ -1349,5 +1794,150 @@ fn format_intent_markdown(out: &mut String, contract: &IntentContract, heading_l
             out.push_str(&format!("* 📝 {}\n", note));
         }
         out.push('\n');
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[test]
+    fn cli_parses_shortcut_format_for_site_and_build_site() {
+        let site_cli = DocversionCli::try_parse_from([
+            "docversion",
+            "site",
+            "--format",
+            "shortcut",
+            "--out-dir",
+            "target/shortcut_test",
+        ])
+        .expect("site --format shortcut should parse");
+
+        match site_cli.command {
+            Commands::Site(args) => {
+                assert_eq!(args.format, DocFormat::Shortcut);
+                assert_eq!(args.out_dir, PathBuf::from("target/shortcut_test"));
+            }
+            other => panic!("Expected Commands::Site, got {:?}", other),
+        }
+
+        let build_cli =
+            DocversionCli::try_parse_from(["docversion", "build-site", "--format", "shortcut"])
+                .expect("build-site --format shortcut should parse");
+
+        match build_cli.command {
+            Commands::BuildSite(args) => {
+                assert_eq!(args.format, DocFormat::Shortcut);
+            }
+            other => panic!("Expected Commands::BuildSite, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn cli_defaults_to_standard_format() {
+        let cli = DocversionCli::try_parse_from(["docversion", "site"])
+            .expect("site without --format should parse");
+
+        match cli.command {
+            Commands::Site(args) => assert_eq!(args.format, DocFormat::Standard),
+            other => panic!("Expected Commands::Site, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn generated_crate_markdown_sanitizes_html_for_shortcut_docs() {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let temp_crate = std::env::temp_dir().join(format!("hh_docversion_shortcut_{nonce}"));
+        let src_dir = temp_crate.join("src");
+        fs::create_dir_all(&src_dir).expect("create temp src dir");
+
+        let sample_lib = concat!(
+            "//! <div class=\"banner\">Internal Header</div>\n",
+            "//! See [Ledger](/latest/tuos/index.html) for details.<br/>\n",
+            "/// Verifies input items.\n",
+            "/// ```rust\n",
+            "/// let ok = verify(vec![1, 2]);\n",
+            "/// ```\n",
+            "pub fn verify<T: Ord>(items: Vec<T>) -> Result<(), String> {\n",
+            "    assert!(!items.is_empty());\n",
+            "    if items.len() > 10 {\n",
+            "        return Err(\"too many\".into());\n",
+            "    }\n",
+            "    Ok(())\n",
+            "}\n"
+        );
+        fs::write(src_dir.join("lib.rs"), sample_lib).expect("write temp lib.rs");
+
+        let raw_md = generate_markdown_summary("sample_crate", &temp_crate)
+            .expect("generate markdown summary");
+        let clean_md = sanitize_for_shortcut_docs(&raw_md);
+
+        let _ = fs::remove_dir_all(&temp_crate);
+
+        assert!(!clean_md.contains("<div"));
+        assert!(!clean_md.contains("<br/>"));
+        assert!(clean_md.contains("[Ledger](./tuos.md)"));
+        assert!(
+            clean_md.contains("pub fn verify<T: Ord>(items: Vec<T>) -> Result<(), String>"),
+            "Actual generated markdown:\n{}",
+            clean_md
+        );
+        assert!(clean_md.contains("~~~rust\nlet ok = verify(vec![1, 2]);\n~~~"));
+        assert_eq!(clean_md.matches("🚫 Reject:").count(), 1);
+    }
+
+    #[test]
+    fn workspace_summary_scans_all_member_crates() {
+        let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(Path::parent)
+            .expect("workspace root");
+
+        let raw_md = generate_markdown_summary("hh-docversion", workspace_root)
+            .expect("generate workspace markdown summary");
+        let clean_md = sanitize_for_shortcut_docs(&raw_md);
+
+        assert!(clean_md.contains("## Crate `docversion-core`"));
+        assert!(clean_md.contains("## Crate `cargo-docversion`"));
+        assert!(clean_md.contains("sanitize_for_shortcut_docs"));
+        assert!(clean_md.contains("impl fmt::Display for VersionIdentifier"));
+    }
+
+    #[test]
+    fn universal_source_scanner_extracts_ts_py_go_and_sql() {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let temp_dir = std::env::temp_dir().join(format!("hh_docversion_polyglot_{nonce}"));
+        fs::create_dir_all(&temp_dir).expect("create temp dir");
+
+        fs::write(
+            temp_dir.join("ledger.ts"),
+            "// Computes balance\nexport function computeBalance(entries: number[]): number {\n  return 0;\n}\n",
+        )
+        .unwrap();
+        fs::write(
+            temp_dir.join("audit.py"),
+            "# Verifies hash chain\ndef verify_chain(blocks: list[str]) -> bool:\n    return True\n",
+        )
+        .unwrap();
+        fs::write(
+            temp_dir.join("schema.sql"),
+            "-- Core ledger entries\nCREATE TABLE journal_entries (\n    id TEXT PRIMARY KEY\n);\n",
+        )
+        .unwrap();
+
+        let raw_md = generate_markdown_summary("polyglot-workspace", &temp_dir).unwrap();
+        let clean_md = sanitize_for_shortcut_docs(&raw_md);
+        let _ = fs::remove_dir_all(&temp_dir);
+
+        assert!(clean_md.contains("~~~typescript\nexport function computeBalance(entries: number[]): number\n~~~"));
+        assert!(clean_md.contains("~~~python\ndef verify_chain(blocks: list[str]) -> bool:\n~~~"));
+        assert!(clean_md.contains("~~~sql\nCREATE TABLE journal_entries (\n    id TEXT PRIMARY KEY\n);\n~~~"));
     }
 }
