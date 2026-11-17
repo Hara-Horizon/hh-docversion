@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["CoreError"],"fn":["escape_html_attribute","generate_redirect_html"],"mod":["shortcut"],"struct":["VersionIdentifier"]};
+window.SIDEBAR_ITEMS = {"enum":["CoreError"],"fn":["escape_html_attribute","generate_redirect_html"],"mod":["shortcut","xref"],"struct":["VersionIdentifier"]};

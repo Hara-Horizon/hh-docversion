@@ -8,7 +8,7 @@
 
 ### `fn generate_markdown_summary`
 
-Recursively scans Rust crates, Markdown documentation (`docs/*.md`), and multi-language public interfaces (`.ts`, `.tsx`, `.js`, `.py`, `.go`, `.sql`) into a unified Markdown index.
+Two-pass workspace scanner: 1. Indexes all public symbols across workspace crates into `WorkspaceSymbolIndex`. 2. Renders public interfaces, doctests, multi-language files, and `docs/*.md` with resolved cross-crate intra-doc links.
 
 ~~~rust
 pub fn generate_markdown_summary(workspace_title: &str, crate_root: &Path) -> Result<String>
@@ -179,7 +179,78 @@ Language-agnostic lexical syntax highlighter emitting uniform styled spans so ma
 pub fn highlight_code_universal(line: &str) -> String
 ~~~
 
+### Module `xref`
+
+Workspace-wide cross-crate symbol index and intra-doc link resolver.
+
+#### `enum SymbolKind`
+
+Kind of public Rust item indexed across workspace member crates.
+
+**Variants:**
+
+* `Module`
+* `Struct`
+* `Enum`
+* `Trait`
+* `Function`
+* `Method`
+* `TypeAlias`
+* `Constant`
+
+#### `struct SymbolEntry`
+
+Canonical location of an indexed workspace symbol.
+
+**Fields:**
+
+* `crate_ident: String` - Cargo crate identifier using underscores (e.g., `docversion_core`).
+* `full_path: String` - Full Rust path (e.g., `docversion_core::shortcut::sanitize_for_shortcut_docs`).
+* `short_name: String` - Short item name (e.g., `sanitize_for_shortcut_docs` or `VersionIdentifier::new`).
+* `kind: SymbolKind` - Item classification.
+* `markdown_anchor: String` - Single-file Markdown heading slug (e.g., `#fn-sanitize_for_shortcut_docs`).
+* `rustdoc_path: String` - Relative Rustdoc HTML path (e.g., `docversion_core/shortcut/fn.sanitize_for_shortcut_docs.html`).
+
+#### `struct WorkspaceSymbolIndex`
+
+Exact workspace symbol registry for cross-crate intra-doc link resolution.
+
+**Fields:**
+
+
+#### `fn new` (impl WorkspaceSymbolIndex)
+
+~~~rust
+pub fn new() -> Self
+~~~
+
+#### `fn insert` (impl WorkspaceSymbolIndex)
+
+Registers a public symbol in the workspace index.
+
+~~~rust
+pub fn insert(&mut self, entry: SymbolEntry)
+~~~
+
+#### `fn resolve` (impl WorkspaceSymbolIndex)
+
+Resolves a Rustdoc intra-doc target relative to `current_crate` and optional `current_type`.
+
+~~~rust
+pub fn resolve(&self, raw_target: &str, current_crate: &str, current_type: Option<&str>,) -> Option<&SymbolEntry>
+~~~
+
+#### `fn resolve_markdown_links` (impl WorkspaceSymbolIndex)
+
+Rewrites Rustdoc intra-doc links in Markdown prose into Markdown anchor links (`#...`), preserving fenced code blocks and standard inline code spans.
+
+~~~rust
+pub fn resolve_markdown_links(&self, markdown: &str, current_crate: &str, current_type: Option<&str>,) -> String
+~~~
+
 ### `enum CoreError`
+
+Core domain errors for version identification and safe redirect generation.
 
 **Variants:**
 
@@ -194,9 +265,11 @@ fn from(err: semver::Error) -> Self
 
 ### `struct VersionIdentifier`
 
+Canonical SemVer + optional Git revision identifier for documentation builds.
+
 **Fields:**
 
-* `declared_version: semver::Version`
+* `declared_version: Version`
 * `revision_suffix: Option<String>`
 
 ### `fn new` (impl VersionIdentifier)
@@ -238,6 +311,8 @@ fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
 ~~~
 
 ### `fn escape_html_attribute`
+
+Escapes special HTML characters for safe attribute interpolation.
 
 ~~~rust
 pub fn escape_html_attribute(input: &str) -> String
