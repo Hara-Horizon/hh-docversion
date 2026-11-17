@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -9,7 +10,7 @@ use docversion_core::{
     generate_redirect_html, sanitize_for_shortcut_docs, SymbolEntry, SymbolKind, VersionIdentifier,
     WorkspaceSymbolIndex,
 };
-use docversion_git::compute_doc_revision;
+use docversion_git::{compute_doc_revision, GitContext};
 use docversion_manifest::SchemaMatrix;
 use serde::{Deserialize, Serialize};
 
@@ -24,12 +25,24 @@ struct RenderContext<'a> {
     index: &'a WorkspaceSymbolIndex,
     current_crate: &'a str,
     current_type: Option<&'a str>,
+    /// When `Some(rel_path)`, rewrites links as cross-file relative Markdown paths (`./foo.md#bar`).
+    /// When `None`, rewrites links as single-file heading anchors (`#bar`).
+    current_doc_path: Option<&'a str>,
 }
 
 impl<'a> RenderContext<'a> {
     fn resolve_text(&self, text: &str) -> String {
-        self.index
-            .resolve_markdown_links(text, self.current_crate, self.current_type)
+        match self.current_doc_path {
+            Some(doc_path) => self.index.resolve_multifile_markdown_links(
+                text,
+                self.current_crate,
+                self.current_type,
+                doc_path,
+            ),
+            None => self
+                .index
+                .resolve_markdown_links(text, self.current_crate, self.current_type),
+        }
     }
 
     fn with_type(&self, ty: &'a str) -> RenderContext<'a> {
@@ -37,6 +50,7 @@ impl<'a> RenderContext<'a> {
             index: self.index,
             current_crate: self.current_crate,
             current_type: Some(ty),
+            current_doc_path: self.current_doc_path,
         }
     }
 }
@@ -117,6 +131,14 @@ fn extract_doc_comments(attrs: &[syn::Attribute]) -> String {
     docs.join("\n")
 }
 
+fn build_doc_rel_path(crate_ident: &str, mod_segments: &[String]) -> String {
+    if mod_segments.is_empty() {
+        format!("{}.md", crate_ident)
+    } else {
+        format!("{}/{}.md", crate_ident, mod_segments.join("/"))
+    }
+}
+
 /// Pass 1: Collects public symbols across a single crate root into `WorkspaceSymbolIndex`.
 fn collect_crate_symbols(
     crate_ident: &str,
@@ -186,6 +208,7 @@ fn collect_item_symbol(
     index: &mut WorkspaceSymbolIndex,
 ) -> Result<()> {
     let html_prefix = build_rustdoc_prefix(crate_ident, mod_segments);
+    let doc_rel_path = build_doc_rel_path(crate_ident, mod_segments);
 
     match item {
         Item::Mod(ItemMod {
@@ -195,6 +218,9 @@ fn collect_item_symbol(
             ..
         }) => {
             let name = ident.to_string();
+            let mut next_mods = mod_segments.to_vec();
+            next_mods.push(name.clone());
+
             let full_path = build_qualified_path(crate_ident, mod_segments, &name);
             index.insert(SymbolEntry {
                 crate_ident: crate_ident.to_string(),
@@ -202,11 +228,9 @@ fn collect_item_symbol(
                 short_name: name.clone(),
                 kind: SymbolKind::Module,
                 markdown_anchor: heading_slug(&format!("Module {}", name)),
+                doc_rel_path: build_doc_rel_path(crate_ident, &next_mods),
                 rustdoc_path: format!("{}/{}/index.html", html_prefix, name),
             });
-
-            let mut next_mods = mod_segments.to_vec();
-            next_mods.push(name.clone());
 
             if let Some((_, inline_items)) = content {
                 for inner in inline_items {
@@ -247,6 +271,7 @@ fn collect_item_symbol(
                 short_name: name.clone(),
                 kind: SymbolKind::Struct,
                 markdown_anchor: heading_slug(&format!("struct {}", name)),
+                doc_rel_path,
                 rustdoc_path: format!("{}/struct.{}.html", html_prefix, name),
             });
         }
@@ -262,6 +287,7 @@ fn collect_item_symbol(
                 short_name: name.clone(),
                 kind: SymbolKind::Enum,
                 markdown_anchor: heading_slug(&format!("enum {}", name)),
+                doc_rel_path,
                 rustdoc_path: format!("{}/enum.{}.html", html_prefix, name),
             });
         }
@@ -277,6 +303,7 @@ fn collect_item_symbol(
                 short_name: name.clone(),
                 kind: SymbolKind::Trait,
                 markdown_anchor: heading_slug(&format!("trait {}", name)),
+                doc_rel_path,
                 rustdoc_path: format!("{}/trait.{}.html", html_prefix, name),
             });
         }
@@ -292,6 +319,7 @@ fn collect_item_symbol(
                 short_name: name.clone(),
                 kind: SymbolKind::Function,
                 markdown_anchor: heading_slug(&format!("fn {}", name)),
+                doc_rel_path,
                 rustdoc_path: format!("{}/fn.{}.html", html_prefix, name),
             });
         }
@@ -307,6 +335,7 @@ fn collect_item_symbol(
                 short_name: name.clone(),
                 kind: SymbolKind::TypeAlias,
                 markdown_anchor: heading_slug(&format!("type {}", name)),
+                doc_rel_path,
                 rustdoc_path: format!("{}/type.{}.html", html_prefix, name),
             });
         }
@@ -322,6 +351,7 @@ fn collect_item_symbol(
                 short_name: name.clone(),
                 kind: SymbolKind::Constant,
                 markdown_anchor: heading_slug(&format!("const {}", name)),
+                doc_rel_path,
                 rustdoc_path: format!("{}/constant.{}.html", html_prefix, name),
             });
         }
@@ -355,6 +385,7 @@ fn collect_item_symbol(
                             short_name: scoped_short,
                             kind: SymbolKind::Method,
                             markdown_anchor: heading_slug(&heading_text),
+                            doc_rel_path: doc_rel_path.clone(),
                             rustdoc_path: format!(
                                 "{}/struct.{}.html#method.{}",
                                 html_prefix, type_name, method_name
@@ -398,8 +429,8 @@ fn scan_crate_root(
 
 /// Two-pass workspace scanner:
 /// 1. Indexes all public symbols across workspace crates into `WorkspaceSymbolIndex`.
-/// 2. Renders public interfaces, doctests, multi-language files, and `docs/*.md` with
-///    resolved cross-crate intra-doc links.
+/// 2. Renders public interfaces, doctests, multi-language files, and handwritten `docs/*.md`
+///    guides with resolved cross-crate intra-doc links.
 pub fn generate_markdown_summary(workspace_title: &str, crate_root: &Path) -> Result<String> {
     let mut symbol_index = WorkspaceSymbolIndex::new();
     let mut workspace_crates: Vec<(String, String, PathBuf)> = Vec::new();
@@ -440,6 +471,7 @@ pub fn generate_markdown_summary(workspace_title: &str, crate_root: &Path) -> Re
                 index: &symbol_index,
                 current_crate: crate_ident,
                 current_type: None,
+                current_doc_path: None,
             };
             scan_crate_root(crate_name, pkg_dir, &mut out, 2, &ctx)?;
         }
@@ -449,6 +481,7 @@ pub fn generate_markdown_summary(workspace_title: &str, crate_root: &Path) -> Re
             index: &symbol_index,
             current_crate: &fallback_ident,
             current_type: None,
+            current_doc_path: None,
         };
         let src_dir = crate_root.join("src");
         let lib_rs = src_dir.join("lib.rs");
@@ -464,7 +497,7 @@ pub fn generate_markdown_summary(workspace_title: &str, crate_root: &Path) -> Re
     // Universal multi-language source scanner (.ts, .tsx, .js, .py, .go, .sql)
     scan_universal_sources(crate_root, crate_root, &mut out)?;
 
-    // Documentation directory Markdown ingestion (docs/**/*.md)
+    // Handwritten Markdown guides in docs/ (skipping generated export-md artifacts)
     let docs_dir = crate_root.join("docs");
     if docs_dir.is_dir() {
         let default_crate = workspace_crates
@@ -475,11 +508,286 @@ pub fn generate_markdown_summary(workspace_title: &str, crate_root: &Path) -> Re
             index: &symbol_index,
             current_crate: default_crate,
             current_type: None,
+            current_doc_path: None,
         };
         scan_markdown_docs(&docs_dir, crate_root, &mut out, &ctx)?;
     }
 
     Ok(out)
+}
+
+pub fn export_tracked_docs_tree(workspace_root: &Path, out_dir: &Path) -> Result<()> {
+    let manifest_path = workspace_root.join("Cargo.toml");
+    let metadata = MetadataCommand::new()
+        .manifest_path(&manifest_path)
+        .no_deps()
+        .exec()
+        .context("Failed to resolve workspace metadata for export-md")?;
+
+    let root_pkg = metadata
+        .root_package()
+        .or_else(|| metadata.workspace_packages().first().copied())
+        .context("No packages found in workspace")?;
+
+    let workspace_title = root_pkg.name.clone();
+    let workspace_ver = root_pkg.version.to_string();
+
+    let mut packages = metadata.workspace_packages();
+    packages.sort_by(|a, b| a.name.cmp(&b.name));
+
+    let mut symbol_index = WorkspaceSymbolIndex::new();
+    let mut crate_specs: Vec<(String, String, String, PathBuf)> = Vec::new();
+
+    for pkg in &packages {
+        if let Some(pkg_dir) = pkg.manifest_path.parent() {
+            let crate_ident = pkg.name.replace('-', "_");
+            let pkg_path = pkg_dir.as_std_path().to_path_buf();
+            collect_crate_symbols(&crate_ident, &pkg_path, &mut symbol_index)?;
+            crate_specs.push((
+                pkg.name.clone(),
+                crate_ident,
+                pkg.version.to_string(),
+                pkg_path,
+            ));
+        }
+    }
+
+    let git_ctx = GitContext::resolve(workspace_root).ok();
+    let git_rev = compute_doc_revision(workspace_root, &["src/", "Cargo.toml", "README.md"])
+        .unwrap_or_else(|_| "rev.clean".to_string());
+    let tag_display = git_ctx
+        .as_ref()
+        .and_then(|c| c.latest_tag.clone())
+        .unwrap_or_else(|| format!("v{}", workspace_ver));
+
+    fs::create_dir_all(out_dir)?;
+
+    let mut readme = String::new();
+    readme.push_str(&format!("# {} — Documentation Index\n\n", workspace_title));
+    readme.push_str(&format!(
+        "> **Version:** `v{}` · **Tag:** `{}` · **Revision:** `{}`\n\n",
+        workspace_ver, tag_display, git_rev
+    ));
+    readme.push_str(
+        "Tracked workspace documentation generated by `cargo hh-docversion export-md`.\n\n",
+    );
+    readme.push_str("## Workspace Crates & Modules\n\n");
+    readme.push_str("| Crate | Version | Reference | Submodules |\n");
+    readme.push_str("| :--- | :--- | :--- | :--- |\n");
+
+    let mut generated_files = BTreeMap::new();
+
+    for (crate_name, crate_ident, pkg_ver, pkg_dir) in &crate_specs {
+        let mut module_links = Vec::new();
+        let crate_doc_rel = format!("{}.md", crate_ident);
+        let ctx = RenderContext {
+            index: &symbol_index,
+            current_crate: crate_ident,
+            current_type: None,
+            current_doc_path: Some(&crate_doc_rel),
+        };
+
+        let mut crate_md = String::new();
+        crate_md.push_str(&format!("# Crate `{}` (`v{}`)\n\n", crate_name, pkg_ver));
+        crate_md.push_str("[← Back to Workspace Index](./README.md) · [Full API Reference](./api-reference.md)\n\n");
+
+        let src_dir = pkg_dir.join("src");
+        let lib_rs = src_dir.join("lib.rs");
+        let main_rs = src_dir.join("main.rs");
+        let entry_file = if lib_rs.exists() {
+            Some(lib_rs)
+        } else if main_rs.exists() {
+            Some(main_rs)
+        } else {
+            None
+        };
+
+        if let Some(entry) = entry_file {
+            render_multifile_crate(
+                &entry,
+                &src_dir,
+                crate_ident,
+                &[],
+                &mut crate_md,
+                2,
+                &ctx,
+                &symbol_index,
+                &mut generated_files,
+                &mut module_links,
+            )?;
+        }
+
+        generated_files.insert(crate_doc_rel.clone(), sanitize_for_shortcut_docs(&crate_md));
+
+        let mods_cell = if module_links.is_empty() {
+            "—".to_string()
+        } else {
+            module_links.join(", ")
+        };
+        readme.push_str(&format!(
+            "| `{}` | `v{}` | [`{}`](./{}) | {} |\n",
+            crate_name, pkg_ver, crate_doc_rel, crate_doc_rel, mods_cell
+        ));
+    }
+
+    readme.push_str("\n## Single-File Reference\n\n");
+    readme.push_str(
+        "- [`api-reference.md`](./api-reference.md) — Complete single-file workspace API reference and invariant manifest.\n",
+    );
+
+    let raw_api_ref = generate_markdown_summary(&workspace_title, workspace_root)?;
+    let clean_api_ref = sanitize_for_shortcut_docs(&raw_api_ref);
+    atomic_write(out_dir.join("api-reference.md"), clean_api_ref.as_bytes())?;
+
+    for (rel_path, content) in generated_files {
+        let full_out = out_dir.join(&rel_path);
+        if let Some(parent) = full_out.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        atomic_write(full_out, content.as_bytes())?;
+    }
+
+    let clean_readme = sanitize_for_shortcut_docs(&readme);
+    atomic_write(out_dir.join("README.md"), clean_readme.as_bytes())?;
+
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn render_multifile_crate(
+    file_path: &Path,
+    base_dir: &Path,
+    crate_ident: &str,
+    mod_segments: &[String],
+    out: &mut String,
+    heading_level: usize,
+    ctx: &RenderContext<'_>,
+    symbol_index: &WorkspaceSymbolIndex,
+    generated_files: &mut BTreeMap<String, String>,
+    module_links: &mut Vec<String>,
+) -> Result<()> {
+    if !file_path.exists() {
+        return Ok(());
+    }
+
+    let code = fs::read_to_string(file_path)?;
+    let syntax = match syn::parse_file(&code) {
+        Ok(s) => s,
+        Err(_) => return Ok(()),
+    };
+
+    let file_docs = extract_doc_comments(&syntax.attrs);
+    if !file_docs.is_empty() {
+        let contract = parse_intent_contract(&file_docs);
+        format_intent_markdown(out, &contract, heading_level, ctx);
+    }
+
+    for item in &syntax.items {
+        if let Item::Mod(ItemMod {
+            vis: Visibility::Public(_),
+            ident,
+            content,
+            attrs,
+            ..
+        }) = item
+        {
+            let mod_name = ident.to_string();
+            let mut next_mods = mod_segments.to_vec();
+            next_mods.push(mod_name.clone());
+            let mod_doc_rel = build_doc_rel_path(crate_ident, &next_mods);
+
+            module_links.push(format!("[`{}`](./{})", next_mods.join("::"), mod_doc_rel));
+
+            // Link to submodule file from parent crate/module page
+            let hashes = "#".repeat(heading_level.min(6));
+            let rel_from_parent = ctx
+                .current_doc_path
+                .map(|from| docversion_core::xref::relative_doc_path(from, &mod_doc_rel))
+                .unwrap_or_else(|| format!("./{}", mod_doc_rel));
+            out.push_str(&format!(
+                "{} Module [`{}`]({})\n\n",
+                hashes, mod_name, rel_from_parent
+            ));
+
+            let mod_docs = extract_doc_comments(attrs);
+            if !mod_docs.is_empty() {
+                let contract = parse_intent_contract(&mod_docs);
+                format_intent_markdown(out, &contract, heading_level, ctx);
+            }
+
+            // Render dedicated per-module Markdown file
+            let mod_ctx = RenderContext {
+                index: symbol_index,
+                current_crate: crate_ident,
+                current_type: None,
+                current_doc_path: Some(&mod_doc_rel),
+            };
+
+            let back_to_index = docversion_core::xref::relative_doc_path(&mod_doc_rel, "README.md");
+            let back_to_crate = docversion_core::xref::relative_doc_path(
+                &mod_doc_rel,
+                &format!("{}.md", crate_ident),
+            );
+
+            let mut mod_md = String::new();
+            mod_md.push_str(&format!(
+                "# Module `{}::{}`\n\n",
+                crate_ident,
+                next_mods.join("::")
+            ));
+            mod_md.push_str(&format!(
+                "[← Workspace Index]({}) · [Crate `{}`]({})\n\n",
+                back_to_index, crate_ident, back_to_crate
+            ));
+
+            if !mod_docs.is_empty() {
+                let contract = parse_intent_contract(&mod_docs);
+                format_intent_markdown(&mut mod_md, &contract, 2, &mod_ctx);
+            }
+
+            if let Some((_, inline_items)) = content {
+                for inner in inline_items {
+                    process_item(inner, base_dir, &mut mod_md, 2, &mod_ctx)?;
+                }
+            } else {
+                let mod_file_direct = base_dir.join(format!("{}.rs", mod_name));
+                let mod_file_dir = base_dir.join(&mod_name).join("mod.rs");
+                if mod_file_direct.exists() {
+                    render_multifile_crate(
+                        &mod_file_direct,
+                        &base_dir.join(&mod_name),
+                        crate_ident,
+                        &next_mods,
+                        &mut mod_md,
+                        2,
+                        &mod_ctx,
+                        symbol_index,
+                        generated_files,
+                        module_links,
+                    )?;
+                } else if mod_file_dir.exists() {
+                    render_multifile_crate(
+                        &mod_file_dir,
+                        &base_dir.join(&mod_name),
+                        crate_ident,
+                        &next_mods,
+                        &mut mod_md,
+                        2,
+                        &mod_ctx,
+                        symbol_index,
+                        generated_files,
+                        module_links,
+                    )?;
+                }
+            }
+
+            generated_files.insert(mod_doc_rel, sanitize_for_shortcut_docs(&mod_md));
+        } else {
+            process_item(item, base_dir, out, heading_level, ctx)?;
+        }
+    }
+
+    Ok(())
 }
 
 /// Walks `root` for non-Rust source files and extracts public interfaces + docstrings.
@@ -628,7 +936,7 @@ fn is_go_exported_decl(trimmed: &str) -> bool {
     ident_part.chars().next().is_some_and(|c| c.is_ascii_uppercase())
 }
 
-/// Appends authored Markdown files from `docs/` into the single-file bundle with resolved symbol links.
+/// Appends authored Markdown guides from `docs/` (ignoring generated `export-md` outputs).
 fn scan_markdown_docs(
     dir: &Path,
     workspace_root: &Path,
@@ -643,8 +951,15 @@ fn scan_markdown_docs(
         if path.is_dir() {
             scan_markdown_docs(&path, workspace_root, out, ctx)?;
         } else if path.extension().is_some_and(|ext| ext == "md") {
-            let rel = path.strip_prefix(workspace_root).unwrap_or(&path);
             let content = fs::read_to_string(&path).unwrap_or_default();
+            if content.contains("Tracked workspace documentation generated by `cargo hh-docversion export-md`")
+                || content.contains("[← Back to Workspace Index](./README.md)")
+                || content.contains("[← Workspace Index](")
+                || path.file_name().is_some_and(|n| n == "api-reference.md")
+            {
+                continue;
+            }
+            let rel = path.strip_prefix(workspace_root).unwrap_or(&path);
             if !content.trim().is_empty() {
                 let resolved = ctx.resolve_text(content.trim());
                 out.push_str(&format!("---\n\n## Guide `{}`\n\n", rel.display()));
@@ -1115,6 +1430,9 @@ pub enum Commands {
     /// Assemble versioned distribution tree into target directory
     BuildSite(BuildSiteArgs),
 
+    /// Export tracked Markdown docs/ directory (README.md index, per-module .md files, api-reference.md)
+    ExportMd(ExportMdArgs),
+
     /// Verify application compatibility against schema migration matrix
     #[command(alias = "check")]
     VerifyDb(VerifyDbArgs),
@@ -1167,6 +1485,13 @@ pub struct BuildSiteArgs {
     /// Output format mode
     #[arg(long, value_enum, default_value_t = DocFormat::Standard)]
     pub format: DocFormat,
+}
+
+#[derive(Args, Debug)]
+pub struct ExportMdArgs {
+    /// Output directory for tracked Markdown documentation tree
+    #[arg(long, default_value = "docs")]
+    pub out_dir: PathBuf,
 }
 
 #[derive(Args, Debug)]
@@ -1226,9 +1551,23 @@ pub fn run_cli(cli: DocversionCli) -> Result<()> {
     match cli.command {
         Commands::Doc(args) => execute_doc(args),
         Commands::BuildSite(args) => execute_build_site(args),
+        Commands::ExportMd(args) => execute_export_md(args),
         Commands::VerifyDb(args) => execute_verify_db(args),
         Commands::Site(args) => execute_site(args),
     }
+}
+
+fn execute_export_md(args: ExportMdArgs) -> Result<()> {
+    println!(
+        "==> docversion: Exporting tracked Markdown documentation tree into {}",
+        args.out_dir.display()
+    );
+    export_tracked_docs_tree(Path::new("."), &args.out_dir)?;
+    println!(
+        "==> docversion: Tracked Markdown tree exported successfully at {}",
+        args.out_dir.display()
+    );
+    Ok(())
 }
 
 fn execute_doc(args: DocArgs) -> Result<()> {
@@ -1262,7 +1601,6 @@ fn execute_doc(args: DocArgs) -> Result<()> {
     let head_path = target_dir.join("head.html");
     let head_html = r#"<script>
 (function() {
-  // Pre-seed theme to ayu
   try {
     var theme = localStorage.getItem('rustdoc-theme');
     var useSystem = localStorage.getItem('rustdoc-use-system-theme');
@@ -2146,7 +2484,7 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     #[test]
-    fn cli_parses_shortcut_format_for_site_and_build_site() {
+    fn cli_parses_shortcut_and_export_md_commands() {
         let site_cli = DocversionCli::try_parse_from([
             "docversion",
             "site",
@@ -2165,15 +2503,15 @@ mod tests {
             other => panic!("Expected Commands::Site, got {:?}", other),
         }
 
-        let build_cli =
-            DocversionCli::try_parse_from(["docversion", "build-site", "--format", "shortcut"])
-                .expect("build-site --format shortcut should parse");
+        let export_cli =
+            DocversionCli::try_parse_from(["docversion", "export-md", "--out-dir", "docs"])
+                .expect("export-md should parse");
 
-        match build_cli.command {
-            Commands::BuildSite(args) => {
-                assert_eq!(args.format, DocFormat::Shortcut);
+        match export_cli.command {
+            Commands::ExportMd(args) => {
+                assert_eq!(args.out_dir, PathBuf::from("docs"));
             }
-            other => panic!("Expected Commands::BuildSite, got {:?}", other),
+            other => panic!("Expected Commands::ExportMd, got {:?}", other),
         }
     }
 
@@ -2236,20 +2574,39 @@ mod tests {
     }
 
     #[test]
-    fn workspace_summary_resolves_cross_crate_symbols() {
+    fn export_tracked_docs_tree_emits_readme_modules_and_api_reference() {
         let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR"))
             .parent()
             .and_then(Path::parent)
             .expect("workspace root");
 
-        let raw_md = generate_markdown_summary("hh-docversion", workspace_root)
-            .expect("generate workspace markdown summary");
-        let clean_md = sanitize_for_shortcut_docs(&raw_md);
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let temp_docs = std::env::temp_dir().join(format!("hh_docversion_export_md_{nonce}"));
 
-        assert!(clean_md.contains("## Crate `docversion-core`"));
-        assert!(clean_md.contains("## Crate `cargo-docversion`"));
-        assert!(clean_md.contains("sanitize_for_shortcut_docs"));
-        assert!(clean_md.contains("impl fmt::Display for VersionIdentifier"));
+        export_tracked_docs_tree(workspace_root, &temp_docs)
+            .expect("export_tracked_docs_tree should succeed");
+
+        let readme = fs::read_to_string(temp_docs.join("README.md")).expect("read README.md");
+        let api_ref =
+            fs::read_to_string(temp_docs.join("api-reference.md")).expect("read api-reference.md");
+        let core_md = fs::read_to_string(temp_docs.join("docversion_core.md"))
+            .expect("read docversion_core.md");
+        let xref_md = fs::read_to_string(temp_docs.join("docversion_core/xref.md"))
+            .expect("read docversion_core/xref.md");
+
+        let _ = fs::remove_dir_all(&temp_docs);
+
+        assert!(readme.contains("**Version:** `v"));
+        assert!(readme.contains("**Tag:** `"));
+        assert!(readme.contains("**Revision:** `rev."));
+        assert!(readme.contains("[`docversion_core.md`](./docversion_core.md)"));
+        assert!(readme.contains("[`api-reference.md`](./api-reference.md)"));
+        assert!(core_md.contains("Module [`xref`](./docversion_core/xref.md)"));
+        assert!(xref_md.contains("# Module `docversion_core::xref`"));
+        assert!(api_ref.contains("## Crate `docversion-core`"));
     }
 
     #[test]

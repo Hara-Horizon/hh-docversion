@@ -28,6 +28,8 @@ pub struct SymbolEntry {
     pub kind: SymbolKind,
     /// Single-file Markdown heading slug (e.g., `#fn-sanitize_for_shortcut_docs`).
     pub markdown_anchor: String,
+    /// Multi-file tracked `docs/` relative path (e.g., `docversion_core.md` or `docversion_core/shortcut.md`).
+    pub doc_rel_path: String,
     /// Relative Rustdoc HTML path (e.g., `docversion_core/shortcut/fn.sanitize_for_shortcut_docs.html`).
     pub rustdoc_path: String,
 }
@@ -77,7 +79,6 @@ impl WorkspaceSymbolIndex {
             return None;
         }
 
-        // Normalize hyphenated crate names in path prefix (e.g., `docversion-core::Foo` -> `docversion_core::Foo`)
         let normalized_path = normalize_crate_prefix(cleaned);
 
         // 1. Expand `crate::...` against current crate
@@ -98,12 +99,12 @@ impl WorkspaceSymbolIndex {
             }
         }
 
-        // 3. Exact full path match (`docversion_core::VersionIdentifier` or `docversion_core::shortcut::sanitize_for_shortcut_docs`)
+        // 3. Exact full path match
         if let Some(entry) = self.by_full_path.get(&normalized_path) {
             return Some(entry);
         }
 
-        // 4. Suffix / short-name match (`VersionIdentifier`, `VersionIdentifier::new`, `shortcut::sanitize_for_shortcut_docs`)
+        // 4. Suffix / short-name match
         self.resolve_short_or_suffix(&normalized_path, current_crate)
     }
 
@@ -112,7 +113,6 @@ impl WorkspaceSymbolIndex {
         needle: &str,
         current_crate: &str,
     ) -> Option<&SymbolEntry> {
-        // Exact short-name match: prefer current crate if multiple crates define the same name
         if let Some(candidates) = self.by_short_name.get(needle) {
             if let Some(same_crate) = candidates.iter().find(|e| e.crate_ident == current_crate) {
                 return Some(same_crate);
@@ -122,7 +122,6 @@ impl WorkspaceSymbolIndex {
             }
         }
 
-        // Suffix match across full paths (`::needle`)
         let suffix = format!("::{}", needle);
         let mut matches: Vec<&SymbolEntry> = self
             .by_full_path
@@ -141,13 +140,39 @@ impl WorkspaceSymbolIndex {
         None
     }
 
-    /// Rewrites Rustdoc intra-doc links in Markdown prose into Markdown anchor links (`#...`),
-    /// preserving fenced code blocks and standard inline code spans.
+    /// Rewrites Rustdoc intra-doc links in single-file Markdown prose into `#anchor` links.
     pub fn resolve_markdown_links(
         &self,
         markdown: &str,
         current_crate: &str,
         current_type: Option<&str>,
+    ) -> String {
+        self.resolve_links_with_target(markdown, current_crate, current_type, None)
+    }
+
+    /// Rewrites Rustdoc intra-doc links in multi-file `docs/` exports into relative `.md#anchor` links
+    /// calculated from `current_doc_path` (e.g., `"docversion_core/shortcut.md"`).
+    pub fn resolve_multifile_markdown_links(
+        &self,
+        markdown: &str,
+        current_crate: &str,
+        current_type: Option<&str>,
+        current_doc_path: &str,
+    ) -> String {
+        self.resolve_links_with_target(
+            markdown,
+            current_crate,
+            current_type,
+            Some(current_doc_path),
+        )
+    }
+
+    fn resolve_links_with_target(
+        &self,
+        markdown: &str,
+        current_crate: &str,
+        current_type: Option<&str>,
+        current_doc_path: Option<&str>,
     ) -> String {
         let mut out = String::with_capacity(markdown.len());
         let mut in_fence = false;
@@ -172,7 +197,12 @@ impl WorkspaceSymbolIndex {
                 continue;
             }
 
-            out.push_str(&self.rewrite_line_intra_doc_links(line, current_crate, current_type));
+            out.push_str(&self.rewrite_line_intra_doc_links(
+                line,
+                current_crate,
+                current_type,
+                current_doc_path,
+            ));
         }
 
         out
@@ -183,6 +213,7 @@ impl WorkspaceSymbolIndex {
         line: &str,
         current_crate: &str,
         current_type: Option<&str>,
+        current_doc_path: Option<&str>,
     ) -> String {
         let mut out = String::with_capacity(line.len());
         let mut rest = line;
@@ -195,15 +226,15 @@ impl WorkspaceSymbolIndex {
                 let label = &after_open[..close_idx];
                 let after_close = &after_open[close_idx + 1..];
 
-                // Case 1: Explicit link `[label](target)` where `target` is a Rust path
                 if let Some(after_paren) = after_close.strip_prefix('(') {
                     if let Some(end_paren) = after_paren.find(')') {
                         let target = &after_paren[..end_paren];
                         if let Some(entry) = self.resolve(target, current_crate, current_type) {
+                            let href = format_entry_href(entry, current_doc_path);
                             out.push('[');
                             out.push_str(label);
                             out.push_str("](");
-                            out.push_str(&entry.markdown_anchor);
+                            out.push_str(&href);
                             out.push(')');
                             rest = &after_paren[end_paren + 1..];
                             continue;
@@ -211,13 +242,13 @@ impl WorkspaceSymbolIndex {
                     }
                 }
 
-                // Case 2: Shorthand intra-doc link `` [`Item`] `` or `[Item]` (not followed by `(` or `[`)
                 if !after_close.starts_with('(') && !after_close.starts_with('[') {
                     if let Some(entry) = self.resolve(label, current_crate, current_type) {
+                        let href = format_entry_href(entry, current_doc_path);
                         out.push('[');
                         out.push_str(label);
                         out.push_str("](");
-                        out.push_str(&entry.markdown_anchor);
+                        out.push_str(&href);
                         out.push(')');
                         rest = after_close;
                         continue;
@@ -232,6 +263,71 @@ impl WorkspaceSymbolIndex {
         out.push_str(rest);
         out
     }
+}
+
+fn format_entry_href(entry: &SymbolEntry, current_doc_path: Option<&str>) -> String {
+    match current_doc_path {
+        None => entry.markdown_anchor.clone(),
+        Some(from_path) if from_path == entry.doc_rel_path => {
+            if entry.kind == SymbolKind::Module {
+                "#".to_string()
+            } else {
+                entry.markdown_anchor.clone()
+            }
+        }
+        Some(from_path) => {
+            let rel_file = relative_doc_path(from_path, &entry.doc_rel_path);
+            if entry.kind == SymbolKind::Module {
+                rel_file
+            } else {
+                format!("{}{}", rel_file, entry.markdown_anchor)
+            }
+        }
+    }
+}
+
+/// Computes a POSIX-style relative Markdown path from `from_file` to `to_file` inside `docs/`.
+pub fn relative_doc_path(from_file: &str, to_file: &str) -> String {
+    let from_parts: Vec<&str> = from_file.split('/').filter(|s| !s.is_empty()).collect();
+    let to_parts: Vec<&str> = to_file.split('/').filter(|s| !s.is_empty()).collect();
+
+    let from_dirs = if from_parts.len() > 1 {
+        &from_parts[..from_parts.len() - 1]
+    } else {
+        &[][..]
+    };
+    let to_dirs = if to_parts.len() > 1 {
+        &to_parts[..to_parts.len() - 1]
+    } else {
+        &[][..]
+    };
+
+    let mut common = 0;
+    while common < from_dirs.len()
+        && common < to_dirs.len()
+        && from_dirs[common] == to_dirs[common]
+    {
+        common += 1;
+    }
+
+    let up_count = from_dirs.len() - common;
+    let mut segments = Vec::new();
+    if up_count == 0 {
+        segments.push(".".to_string());
+    } else {
+        for _ in 0..up_count {
+            segments.push("..".to_string());
+        }
+    }
+
+    for dir in &to_dirs[common..] {
+        segments.push((*dir).to_string());
+    }
+    if let Some(file_name) = to_parts.last() {
+        segments.push((*file_name).to_string());
+    }
+
+    segments.join("/")
 }
 
 fn normalize_crate_prefix(path: &str) -> String {
@@ -263,6 +359,7 @@ mod tests {
             short_name: "VersionIdentifier".into(),
             kind: SymbolKind::Struct,
             markdown_anchor: "#struct-versionidentifier".into(),
+            doc_rel_path: "docversion_core.md".into(),
             rustdoc_path: "docversion_core/struct.VersionIdentifier.html".into(),
         });
         idx.insert(SymbolEntry {
@@ -271,6 +368,7 @@ mod tests {
             short_name: "VersionIdentifier::new".into(),
             kind: SymbolKind::Method,
             markdown_anchor: "#fn-new-impl-versionidentifier".into(),
+            doc_rel_path: "docversion_core.md".into(),
             rustdoc_path: "docversion_core/struct.VersionIdentifier.html#method.new".into(),
         });
         idx.insert(SymbolEntry {
@@ -279,6 +377,7 @@ mod tests {
             short_name: "sanitize_for_shortcut_docs".into(),
             kind: SymbolKind::Function,
             markdown_anchor: "#fn-sanitize_for_shortcut_docs".into(),
+            doc_rel_path: "docversion_core/shortcut.md".into(),
             rustdoc_path: "docversion_core/shortcut/fn.sanitize_for_shortcut_docs.html".into(),
         });
         idx
@@ -299,5 +398,30 @@ mod tests {
         assert!(resolved.contains("[`VersionIdentifier::new`](#fn-new-impl-versionidentifier)"));
         assert!(resolved.contains("[shortcut cleaner](#fn-sanitize_for_shortcut_docs)"));
         assert!(resolved.contains("Unknown [`Result`] remains untouched."));
+    }
+
+    #[test]
+    fn resolves_multifile_relative_markdown_paths() {
+        let idx = sample_index();
+        let text = "Calls [`VersionIdentifier::new`] and [`sanitize_for_shortcut_docs`].";
+
+        let from_other_crate =
+            idx.resolve_multifile_markdown_links(text, "cargo_docversion", None, "cargo_docversion.md");
+        assert!(from_other_crate
+            .contains("[`VersionIdentifier::new`](./docversion_core.md#fn-new-impl-versionidentifier)"));
+        assert!(from_other_crate.contains(
+            "[`sanitize_for_shortcut_docs`](./docversion_core/shortcut.md#fn-sanitize_for_shortcut_docs)"
+        ));
+
+        let from_nested_mod = idx.resolve_multifile_markdown_links(
+            text,
+            "docversion_core",
+            None,
+            "docversion_core/shortcut.md",
+        );
+        assert!(from_nested_mod
+            .contains("[`VersionIdentifier::new`](../docversion_core.md#fn-new-impl-versionidentifier)"));
+        assert!(from_nested_mod
+            .contains("[`sanitize_for_shortcut_docs`](#fn-sanitize_for_shortcut_docs)"));
     }
 }

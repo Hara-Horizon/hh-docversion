@@ -4,6 +4,7 @@ use std::path::Path;
 pub struct GitContext {
     pub tree_hash: String,
     pub is_dirty: bool,
+    pub latest_tag: Option<String>,
 }
 
 impl GitContext {
@@ -14,15 +15,44 @@ impl GitContext {
         let head_commit = head
             .peel_to_commit_in_place()
             .context("Failed to peel HEAD to commit")?;
-        let tree_hash = head_commit.id().to_hex_with_len(7).to_string();
+        let head_id = head_commit.id();
+        let tree_hash = head_id.to_hex_with_len(7).to_string();
 
         let is_dirty = check_is_dirty(&repo);
+        let latest_tag = resolve_head_or_latest_tag(&repo, head_id);
 
         Ok(Self {
             tree_hash,
             is_dirty,
+            latest_tag,
         })
     }
+}
+
+fn resolve_head_or_latest_tag(repo: &gix::Repository, head_id: gix::Id<'_>) -> Option<String> {
+    let refs = repo.references().ok()?;
+    let tags = refs.tags().ok()?;
+
+    let mut head_tags = Vec::new();
+    let mut all_tags = Vec::new();
+
+    for mut tag_ref in tags.flatten() {
+        let short_name = tag_ref.name().shorten().to_string();
+        if let Ok(target) = tag_ref.peel_to_id_in_place() {
+            if target == head_id {
+                head_tags.push(short_name.clone());
+            }
+        }
+        all_tags.push(short_name);
+    }
+
+    head_tags.sort();
+    if let Some(exact) = head_tags.pop() {
+        return Some(exact);
+    }
+
+    all_tags.sort();
+    all_tags.pop()
 }
 
 /// Checks whether the Git working tree has uncommitted changes.
