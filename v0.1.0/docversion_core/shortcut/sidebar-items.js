@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["sanitize_for_shortcut_docs"]};

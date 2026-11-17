@@ -1,2 +1,2 @@
-createSrcSidebar('[["cargo_docversion",["",[],["lib.rs"]]],["docversion",["",[],["docversion.rs"]]],["docversion_core",["",[],["lib.rs"]]],["docversion_git",["",[],["lib.rs"]]],["docversion_manifest",["",[],["lib.rs"]]]]');
-//{"start":19,"fragment_lengths":[39,41,39,38,43]}
+createSrcSidebar('[["cargo_docversion",["",[],["lib.rs"]]],["docversion",["",[],["docversion.rs"]]],["docversion_core",["",[],["lib.rs","shortcut.rs"]]],["docversion_git",["",[],["lib.rs"]]],["docversion_manifest",["",[],["lib.rs"]]]]');
+//{"start":19,"fragment_lengths":[39,41,53,38,43]}
