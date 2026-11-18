@@ -24,6 +24,20 @@ use syn::{
     ItemStruct, ItemTrait, ItemType, Visibility,
 };
 
+#[derive(Parser, Debug)]
+#[command(
+    name = "docversion",
+    bin_name = "docversion",
+    author,
+    version,
+    about = "Zero-telemetry documentation bundler and LLM context synthesizer",
+    long_about = None
+)]
+pub struct DocversionCli {
+    #[command(subcommand)]
+    pub command: Commands,
+}
+
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub struct CrateMetadata {
     pub name: String,
@@ -1446,17 +1460,6 @@ pub struct CargoCli {
 #[derive(Subcommand, Debug)]
 pub enum CargoSubcommands {
     Docversion(DocversionCli),
-}
-
-#[derive(Parser, Debug)]
-#[command(
-    name = "docversion",
-    version,
-    about = "Multi-version documentation bundler and schema contract verification engine"
-)]
-pub struct DocversionCli {
-    #[command(subcommand)]
-    pub command: Commands,
 }
 
 #[derive(Subcommand, Debug)]
