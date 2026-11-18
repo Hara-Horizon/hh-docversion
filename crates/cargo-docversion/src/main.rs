@@ -1,14 +1,8 @@
-use anyhow::Result;
 use cargo_docversion::{DocversionCli, run_cli};
 use clap::Parser;
 
-fn main() -> Result<()> {
+fn main() {
     let mut args: Vec<String> = std::env::args().collect();
-
-    if args.iter().any(|arg| arg == "--version" || arg == "-V") {
-        println!("hh-docversion 0.1.0");
-        return Ok(());
-    }
 
     // When invoked as `cargo hh-docversion`, Cargo passes "hh-docversion" as the first argument.
     // Strip it so Clap correctly parses the intended subcommand/flags.
@@ -16,8 +10,12 @@ fn main() -> Result<()> {
         args.remove(1);
     }
 
-    let cli = DocversionCli::try_parse_from(args)?;
-    run_cli(cli)
+    let cli = DocversionCli::try_parse_from(args).unwrap_or_else(|e| e.exit());
+
+    if let Err(err) = run_cli(cli) {
+        eprintln!("Error: {:#}", err);
+        std::process::exit(1);
+    }
 }
 
 #[cfg(test)]

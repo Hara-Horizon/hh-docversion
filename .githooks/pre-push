@@ -16,8 +16,18 @@ if docversion --help | grep -q "build-site"; then
     exit 1
 fi
 
+# Verify version and help flags return clean zero exit codes
+if ! docversion --version > /dev/null; then
+    echo "Error: docversion --version failed or exited non-zero!" >&2
+    exit 1
+fi
+
+if ! docversion --help > /dev/null; then
+    echo "Error: docversion --help failed or exited non-zero!" >&2
+    exit 1
+fi
+
 # Test standalone binary & consolidated site subcommand
-docversion --version
 docversion site --out-dir target/prepush_site
 
 # Test Cargo plugin invocation
