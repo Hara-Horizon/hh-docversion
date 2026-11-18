@@ -1,4 +1,7 @@
 use std::process::Command;
+use assert_fs::prelude::*; // or use assert_fs::fixture::PathChild;
+use assert_fs::TempDir;
+use predicates::prelude::*;
 
 #[test]
 fn test_cli_help_flag() {
