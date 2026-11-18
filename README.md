@@ -87,32 +87,23 @@ docversion-manifest = { git = "https://github.com/Hara-Horizon/hh-docversion.git
 cargo hh-docversion doc --no-deps
 
 # Assemble versioned distribution tree into target/doc_site and generate llms.txt
-cargo hh-docversion build-site --out-dir target/doc_site
-~~~
-
-Or run the all-in-one pipeline:
-
-~~~bash
 cargo hh-docversion site --out-dir target/doc_site
 ~~~
 
 ### 2. Export Clean Markdown & Paste RTF into Shortcut Docs
 
-Pass `--format shortcut` to `site` or `build-site` to strip raw HTML tags outside code fences, rewrite internal links into relative `.md` paths, write `target/doc_site/api-reference.md`, and automatically copy rich-text RTF (with GFM tables and syntax-highlighted code blocks) to your clipboard:
+Pass `--format shortcut` to `site` to strip raw HTML tags outside code fences, rewrite internal links into relative `.md` paths, write `target/doc_site/api-reference.md`, and automatically copy rich-text RTF (with GFM tables and syntax-highlighted code blocks) to your clipboard:
 
 ~~~bash
-# All-in-one build with Shortcut Docs sanitization + automatic RTF clipboard copy
+# Build with Shortcut Docs sanitization + automatic RTF clipboard copy
 cargo hh-docversion site --format shortcut --out-dir target/doc_site
-
-# Or sanitize and copy during standalone site assembly
-cargo hh-docversion build-site --format shortcut --out-dir target/doc_site
 ~~~
 
 Open your target Shortcut Doc and press `Cmd+V` (`Ctrl+V` on Linux/Windows) to paste formatted headings, tables, blockquotes, and uniform-weight syntax-highlighted code blocks.
 
 ### 3. Autonomous Agent Context (`llms.txt`)
 
-Every `build-site` run generates an agent-ready documentation bundle:
+Every `site` run generates an agent-ready documentation bundle:
 
 - `target/doc_site/llms.txt`: Primary context file containing workspace crate intent, module contracts, polyglot interfaces, and `docs/**/*.md` guides.
 - `target/doc_site/api-reference.md`: Mirrored reference Markdown (sanitized for Shortcut Docs when `--format shortcut` is enabled).
@@ -127,7 +118,7 @@ Document your modules and types using clean markdown or blockquote tags. `hh-doc
 //! Double-entry transactional reconciliation engine.
 //!
 //! > **🎯 INTENT**  
-//! > Guarantees exact ledger accounting and verification. Tuos acts as 
+//! > Guarantees exact ledger accounting and verification. Tuos acts as  
 //! > the terminal validator for financial events before persistent journal serialization.
 //!
 //! > **🛡️ INVARIANT**  
@@ -161,7 +152,7 @@ Document your modules and types using clean markdown or blockquote tags. `hh-doc
 ### 5. Ingest External Docs (TypeDoc, VitePress, etc.)
 
 ~~~bash
-cargo hh-docversion build-site \
+cargo hh-docversion site \
   --source docs/dist \
   --version 1.0.0 \
   --entry-page index.html \
