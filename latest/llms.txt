@@ -37,6 +37,12 @@
 
 * `out: PathBuf` - Output path for synthesized repo_metadata.json
 
+### `struct GithubMetaArgs`
+
+**Fields:**
+
+* `manifest: PathBuf` - Path to synthesized repo_metadata.json manifest
+
 ### `fn generate_markdown_summary`
 
 Two-pass workspace scanner: 1. Indexes all public symbols across workspace crates into `WorkspaceSymbolIndex`. 2. Renders public interfaces, doctests, multi-language files, and handwritten `docs/*.md` guides with resolved cross-crate intra-doc links.
@@ -129,6 +135,7 @@ pub fn format_assertions_markdown(out: &mut String, assertions: &[ExtractedAsser
 * `BuildSite` - Assemble versioned distribution tree into target directory
 * `ExportMd` - Export tracked Markdown docs/ directory (README.md index, per-module .md files, api-reference.md)
 * `RepoMetadata` - Synthesize deterministic repo_metadata.json from Cargo.toml and Intent blocks
+* `GithubMeta` - Validate and preview repository metadata against GitHub constraints offline
 * `VerifyDb` - Verify application compatibility against schema migration matrix
 * `Site` - One-shot build: compiles documentation and bundles versioned site
 
