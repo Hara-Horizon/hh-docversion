@@ -47,9 +47,11 @@ fn test_cli_verify_db_missing_args_fails() {
 #[test]
 fn test_cli_build_site_with_custom_source() {
     let temp = assert_fs::TempDir::new().unwrap();
-    let source_dir = temp.child("docs/dist");
+    let source_dir = temp.child("docs_custom");
     source_dir.create_dir_all().unwrap();
-    source_dir.child("index.html").write_str("<html>Custom Docs</html>").unwrap();
+    
+    // Provide the required entry page and asset structure expected by the builder
+    source_dir.child("index.html").write_str("<html><body>Documentation Index</body></html>").unwrap();
 
     let out_dir = temp.child("site_out");
 
@@ -64,6 +66,7 @@ fn test_cli_build_site_with_custom_source() {
         .arg("--out-dir")
         .arg(out_dir.path());
 
-    cmd.assert().success();
+    let assert = cmd.assert();
+    assert.success();
     assert!(out_dir.join("latest/index.html").exists());
 }
