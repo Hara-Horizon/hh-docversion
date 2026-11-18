@@ -24,3 +24,11 @@ lcov.info
 .env
 .env.*
 !.env.example
+
+# Triage sync artifacts
+issues_to_triage.json
+prs_to_triage.json
+
+# Triage sync artifacts
+issues_to_triage.json
+prs_to_triage.json
