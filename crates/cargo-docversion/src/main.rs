@@ -3,14 +3,14 @@ use clap::Parser;
 fn main() {
     let raw: Vec<String> = std::env::args().collect();
 
-    // Cargo passes [".../cargo-docversion", "docversion", ...].
-    // Strip the binary name (arg 0) and the forwarded subcommand "docversion" (arg 1) if present.
+    // Cargo passes [".../cargo-hh-docversion", "hh-docversion", ...].
+    // Strip the binary name (arg 0) and the forwarded subcommand ("hh-docversion" or "docversion") if present.
     let mut clean_args: Vec<String> = Vec::with_capacity(raw.len());
     clean_args.push(raw.first().cloned().unwrap_or_else(|| "docversion".to_string()));
 
     let mut iter = raw.into_iter().skip(1);
     if let Some(first) = iter.next() {
-        if first != "docversion" {
+        if first != "hh-docversion" && first != "docversion" {
             clean_args.push(first);
         }
     }

@@ -6,6 +6,7 @@ rust-version.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
+homepage.workspace = true
 description = "Universal version-aware documentation site bundler and DB schema matrix contract verifier."
 documentation = "https://docs.rs/cargo-docversion"
 keywords = ["cargo", "plugin", "documentation", "versioning", "schema"]
@@ -16,12 +17,8 @@ name = "cargo_docversion"
 path = "src/lib.rs"
 
 [[bin]]
-name = "cargo-docversion"
+name = "cargo-hh-docversion"
 path = "src/main.rs"
-
-[[bin]]
-name = "docversion"
-path = "src/bin/docversion.rs"
 
 [dependencies]
 docversion-core.workspace = true
