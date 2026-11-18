@@ -20,6 +20,10 @@ path = "src/lib.rs"
 name = "cargo-hh-docversion"
 path = "src/main.rs"
 
+[[bin]]
+name = "docversion"
+path = "src/main.rs"
+
 [dependencies]
 docversion-core.workspace = true
 docversion-git.workspace = true

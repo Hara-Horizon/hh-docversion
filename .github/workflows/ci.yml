@@ -49,10 +49,14 @@ jobs:
       - name: Install cargo-docversion and docversion
         run: cargo install --path crates/cargo-docversion --force
 
-      - name: Verify docversion binary
+      - name: Verify binaries
         run: |
           docversion --version
-          docversion --help
+          cargo hh-docversion --version
+          docversion build-site --out-dir target/ci_doc_site
+          test -f target/ci_doc_site/versions.json
+          test -f target/ci_doc_site/index.html
+          test -d target/ci_doc_site/latest
 
       - name: Verify cargo-docversion plugin
         run: |
