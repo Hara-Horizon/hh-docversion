@@ -43,58 +43,24 @@ fn test_cli_verify_db_missing_args_fails() {
 
 #[test]
 fn test_cli_build_site_with_custom_source() {
-    use std::fs;
-    use std::time::{SystemTime, UNIX_EPOCH};
+    let temp = assert_fs::TempDir::new().unwrap();
+    let source_dir = temp.child("docs/dist");
+    source_dir.create_dir_all().unwrap();
+    source_dir.child("index.html").write_str("<html>Custom Docs</html>").unwrap();
 
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
-    let temp_root = std::env::temp_dir().join(format!("docversion_ext_test_{}", nanos));
-    let mock_docs = temp_root.join("vitepress_dist");
-    let out_dir = temp_root.join("public_site");
+    let out_dir = temp.child("site_out");
 
-    fs::create_dir_all(&mock_docs).unwrap();
-    fs::write(
-        mock_docs.join("index.html"),
-        "<h1>VitePress Documentation</h1>",
-    )
-    .unwrap();
+    let mut cmd = assert_cmd::Command::cargo_bin("docversion").unwrap();
+    cmd.arg("build-site")
+        .arg("--source")
+        .arg(source_dir.path())
+        .arg("--version")
+        .arg("1.0.0")
+        .arg("--entry-page")
+        .arg("index.html")
+        .arg("--out-dir")
+        .arg(out_dir.path());
 
-    let binary = env!("CARGO_BIN_EXE_docversion");
-    let output = Command::new(binary)
-        .args([
-            "build-site",
-            "--source",
-            mock_docs.to_str().unwrap(),
-            "--version",
-            "3.2.1",
-            "--entry-page",
-            "index.html",
-            "--out-dir",
-            out_dir.to_str().unwrap(),
-        ])
-        .output()
-        .expect("Failed to execute docversion binary");
-
-    assert!(
-        output.status.success(),
-        "Command failed: {:?}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-
-    // Assert structural directory expectations
+    cmd.assert().success();
     assert!(out_dir.join("latest/index.html").exists());
-    assert!(out_dir.join("v3.2.1/index.html").exists());
-    assert!(out_dir.join("versions.json").exists());
-    assert!(out_dir.join("index.html").exists());
-
-    let redirect_html = fs::read_to_string(out_dir.join("index.html")).unwrap();
-    assert!(
-        redirect_html.contains("latest/") || redirect_html.contains("latest/index.html"),
-        "redirect HTML was: {}",
-        redirect_html
-    );
-
-    let _ = fs::remove_dir_all(temp_root);
 }

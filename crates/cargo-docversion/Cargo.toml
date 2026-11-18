@@ -22,7 +22,7 @@ path = "src/main.rs"
 
 [[bin]]
 name = "docversion"
-path = "src/main.rs"
+path = "src/bin/docversion.rs"
 
 [dependencies]
 docversion-core.workspace = true
