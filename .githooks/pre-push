@@ -1,8 +1,25 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-echo "==> Running pre-push checks..."
+echo "==> Running pre-push workspace checks..."
 cargo check --workspace --all-targets
 cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
+
+echo "==> Verifying binary installation and site packaging..."
+cargo doc --no-deps
+cargo install --path crates/cargo-docversion --force
+
+# Test standalone binary & consolidated site subcommand
+docversion --version
+docversion site --out-dir target/prepush_site
+
+# Test Cargo plugin invocation
+cargo hh-docversion --version
+
+# Verify expected site outputs exist
+test -f target/prepush_site/versions.json
+test -f target/prepush_site/index.html
+test -d target/prepush_site/latest
+
 echo "==> Pre-push verification passed."
