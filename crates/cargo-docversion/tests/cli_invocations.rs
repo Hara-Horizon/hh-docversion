@@ -1,5 +1,7 @@
 use std::process::Command;
 use assert_fs::fixture::PathChild;
+use assert_fs::prelude::*;
+use assert_fs::TempDir;
 
 #[test]
 fn test_cli_help_flag() {
@@ -44,11 +46,10 @@ fn test_cli_verify_db_missing_args_fails() {
 
 #[test]
 fn test_cli_build_site_with_custom_source() {
-    let temp = assert_fs::TempDir::new().unwrap();
+    let temp = TempDir::new().unwrap();
     let source_dir = temp.child("docs_custom");
     source_dir.create_dir_all().unwrap();
     
-    // Production-grade crate manifest
     source_dir.child("Cargo.toml").write_str(r#"
         [package]
         name = "cargo-docversion"
@@ -59,8 +60,7 @@ fn test_cli_build_site_with_custom_source() {
     let target_doc = source_dir.child("target/doc");
     target_doc.create_dir_all().unwrap();
     
-    // Production-grade Rustdoc HTML structure
-    target_doc.child("index.html").write_str(r#"<!DOCTYPE html>
+    target_doc.child("index.html").write_str(r##"<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="utf-8">
@@ -71,14 +71,14 @@ fn test_cli_build_site_with_custom_source() {
 <body class="rustdoc mod">
     <main>
         <section id="main-content" class="content">
-            <h1 class="fqn">Crate <a class="mod" href="#">cargo_docversion</a></h1>
-            <block class="docblock">
+            <h1 class="fqn">Crate <a class="mod" href="https://example.com">cargo_docversion</a></h1>
+            <div class="docblock">
                 <p>Zero-telemetry documentation bundler and LLM context synthesizer.</p>
-            </block>
+            </div>
         </section>
     </main>
 </body>
-</html>"#).unwrap();
+</html>"##).unwrap();
 
     let out_dir = temp.child("site_out");
 
