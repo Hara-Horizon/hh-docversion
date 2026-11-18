@@ -1,3 +1,7 @@
+//! # Intent: Universal version-aware documentation site bundler and DB schema matrix contract verifier.
+//!
+//! Exposes cargo plugin subcommands for building versioned HTML docs, exporting tracked Markdown trees,
+//! and verifying database schema compatibility offline.
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -19,6 +23,33 @@ use syn::{
     ExprCall, ExprMacro, Fields, ImplItem, Item, ItemConst, ItemEnum, ItemFn, ItemImpl, ItemMod,
     ItemStruct, ItemTrait, ItemType, Visibility,
 };
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
+pub struct CrateMetadata {
+    pub name: String,
+    pub version: String,
+    pub description: Option<String>,
+    pub homepage: Option<String>,
+    pub repository: Option<String>,
+    pub documentation: Option<String>,
+    pub keywords: Vec<String>,
+    pub categories: Vec<String>,
+    pub intent_summary: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
+pub struct RepoMetadata {
+    pub workspace_name: String,
+    pub crates: Vec<CrateMetadata>,
+}
+
+#[derive(Args, Debug)]
+pub struct RepoMetadataArgs {
+    /// Output path for synthesized repo_metadata.json
+    #[arg(long, default_value = "repo_metadata.json")]
+    pub out: PathBuf,
+}
+
 
 /// Context carried through Pass 2 Markdown rendering for exact cross-crate link resolution.
 struct RenderContext<'a> {
@@ -1433,6 +1464,9 @@ pub enum Commands {
     /// Export tracked Markdown docs/ directory (README.md index, per-module .md files, api-reference.md)
     ExportMd(ExportMdArgs),
 
+    /// Synthesize deterministic repo_metadata.json from Cargo.toml and Intent blocks
+    RepoMetadata(RepoMetadataArgs),
+
     /// Verify application compatibility against schema migration matrix
     #[command(alias = "check")]
     VerifyDb(VerifyDbArgs),
@@ -1552,6 +1586,7 @@ pub fn run_cli(cli: DocversionCli) -> Result<()> {
         Commands::Doc(args) => execute_doc(args),
         Commands::BuildSite(args) => execute_build_site(args),
         Commands::ExportMd(args) => execute_export_md(args),
+        Commands::RepoMetadata(args) => execute_repo_metadata(&args),
         Commands::VerifyDb(args) => execute_verify_db(args),
         Commands::Site(args) => execute_site(args),
     }
@@ -2476,6 +2511,98 @@ fn format_intent_markdown(
         }
         out.push('\n');
     }
+}
+
+fn execute_repo_metadata(args: &RepoMetadataArgs) -> Result<()> {
+    println!(
+        "==> docversion: Synthesizing deterministic workspace repo metadata into {}",
+        args.out.display()
+    );
+
+    let manifest_path = Path::new("Cargo.toml");
+    let metadata = MetadataCommand::new()
+        .manifest_path(manifest_path)
+        .no_deps()
+        .exec()
+        .context("Failed to resolve workspace metadata for repo-metadata")?;
+
+    let mut packages = metadata.workspace_packages();
+    packages.sort_by(|a, b| a.name.cmp(&b.name));
+
+    let mut crates = Vec::new();
+
+    for pkg in packages {
+        let mut keywords = pkg.keywords.clone();
+        keywords.sort();
+        keywords.dedup();
+
+        let mut categories = pkg.categories.clone();
+        categories.sort();
+        categories.dedup();
+
+        let mut intent_summary = None;
+        if let Some(pkg_dir) = pkg.manifest_path.parent() {
+            let src_dir = pkg_dir.as_std_path().join("src");
+            let lib_rs = src_dir.join("lib.rs");
+            let main_rs = src_dir.join("main.rs");
+            let entry = if lib_rs.exists() {
+                Some(lib_rs)
+            } else if main_rs.exists() {
+                Some(main_rs)
+            } else {
+                None
+            };
+
+            if let Some(path) = entry {
+                if let Ok(code) = fs::read_to_string(path) {
+                    if let Ok(syntax) = syn::parse_file(&code) {
+                        let docs = extract_doc_comments(&syntax.attrs);
+                        if !docs.is_empty() {
+                            let contract = parse_intent_contract(&docs);
+                            if let Some(intent) = contract.intent {
+                                intent_summary = Some(intent);
+                            } else if !contract.summary.is_empty() {
+                                intent_summary = Some(contract.summary);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        crates.push(CrateMetadata {
+            name: pkg.name.clone(),
+            version: pkg.version.to_string(),
+            description: pkg.description.clone(),
+            homepage: pkg.homepage.clone(),
+            repository: pkg.repository.clone(),
+            documentation: pkg.documentation.clone(),
+            keywords,
+            categories,
+            intent_summary,
+        });
+    }
+
+    let root_pkg = metadata
+        .root_package()
+        .or_else(|| metadata.workspace_packages().first().copied())
+        .context("No packages found in workspace")?;
+
+    let repo_meta = RepoMetadata {
+        workspace_name: root_pkg.name.clone(),
+        crates,
+    };
+
+    let json_bytes = serde_json::to_vec_pretty(&repo_meta)
+        .context("Failed to serialize repo metadata to JSON")?;
+
+    atomic_write(&args.out, &json_bytes)?;
+
+    println!(
+        "==> docversion: Deterministic repo_metadata.json synthesized successfully at {}",
+        args.out.display()
+    );
+    Ok(())
 }
 
 #[cfg(test)]

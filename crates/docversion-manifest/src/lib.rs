@@ -1,3 +1,6 @@
+//! # Intent: Schema compatibility matrix parser and contract assertions for hh-docversion.
+//!
+//! Validates application release versions and artifact checksums against versioned schema transition ledgers.
 use semver::{Version, VersionReq};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};

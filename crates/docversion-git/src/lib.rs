@@ -1,3 +1,6 @@
+//! # Intent: In-process Git tree hash and revision resolver for hh-docversion.
+//!
+//! Resolves HEAD commit revisions, repository tags, and file-level tree hashes efficiently using in-process gitoxide (`gix`).
 use anyhow::{Context, Result};
 use std::path::Path;
 

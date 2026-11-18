@@ -1,0 +1,58 @@
+{
+  "workspace_name": "docversion-core",
+  "crates": [
+    {
+      "name": "cargo-docversion",
+      "version": "0.1.0",
+      "description": "Universal version-aware documentation site bundler and DB schema matrix contract verifier.",
+      "homepage": "https://harahorizon.com",
+      "repository": "https://github.com/Hara-Horizon/hh-docversion",
+      "documentation": "https://docs.rs/cargo-docversion",
+      "keywords": [
+        "cargo",
+        "documentation",
+        "plugin",
+        "schema",
+        "versioning"
+      ],
+      "categories": [
+        "command-line-utilities",
+        "development-tools::cargo-plugins"
+      ],
+      "intent_summary": null
+    },
+    {
+      "name": "docversion-core",
+      "version": "0.1.0",
+      "description": "Core path routing, redirect synthesis, and doc bundler logic for hh-docversion",
+      "homepage": "https://harahorizon.com",
+      "repository": "https://github.com/Hara-Horizon/hh-docversion",
+      "documentation": null,
+      "keywords": [],
+      "categories": [],
+      "intent_summary": "Multi-version documentation bundler and schema contract verification engine."
+    },
+    {
+      "name": "docversion-git",
+      "version": "0.1.0",
+      "description": "In-process Git tree hash and revision resolver for hh-docversion",
+      "homepage": "https://harahorizon.com",
+      "repository": "https://github.com/Hara-Horizon/hh-docversion",
+      "documentation": null,
+      "keywords": [],
+      "categories": [],
+      "intent_summary": null
+    },
+    {
+      "name": "docversion-manifest",
+      "version": "0.1.0",
+      "description": "Schema compatibility matrix parser and contract assertions for hh-docversion",
+      "homepage": null,
+      "repository": "https://github.com/Hara-Horizon/hh-docversion",
+      "documentation": null,
+      "keywords": [],
+      "categories": [],
+      "intent_summary": null
+    }
+  ]
+}

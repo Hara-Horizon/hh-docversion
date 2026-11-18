@@ -1,3 +1,6 @@
+//! # Intent: Core path routing, redirect synthesis, and doc bundler logic for hh-docversion.
+//!
+//! Handles HTML redirect generation, link resolution, and static site assembly without external cloud dependencies.
 pub mod shortcut;
 pub mod xref;
 
