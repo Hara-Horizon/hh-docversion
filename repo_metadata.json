@@ -3,7 +3,7 @@
   "crates": [
     {
       "name": "cargo-docversion",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "description": "Universal version-aware documentation site bundler and DB schema matrix contract verifier.",
       "homepage": "https://harahorizon.com",
       "repository": "https://github.com/Hara-Horizon/hh-docversion",
@@ -23,7 +23,7 @@
     },
     {
       "name": "docversion-core",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "description": "Core path routing, redirect synthesis, and doc bundler logic for hh-docversion",
       "homepage": "https://harahorizon.com",
       "repository": "https://github.com/Hara-Horizon/hh-docversion",
@@ -40,7 +40,7 @@
     },
     {
       "name": "docversion-git",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "description": "In-process Git tree hash and revision resolver for hh-docversion",
       "homepage": "https://harahorizon.com",
       "repository": "https://github.com/Hara-Horizon/hh-docversion",
@@ -57,7 +57,7 @@
     },
     {
       "name": "docversion-manifest",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "description": "Schema compatibility matrix parser and contract assertions for hh-docversion",
       "homepage": "https://harahorizon.com",
       "repository": "https://github.com/Hara-Horizon/hh-docversion",

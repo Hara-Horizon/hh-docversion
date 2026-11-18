@@ -49,7 +49,7 @@ To pin to a specific release tag or commit SHA for reproducible CI pipelines:
 
 ~~~bash
 # Pin to a tagged release
-cargo install --git https://github.com/Hara-Horizon/hh-docversion.git --tag v0.1.0 cargo-docversion
+cargo install --git https://github.com/Hara-Horizon/hh-docversion.git --tag v0.2.0 cargo-docversion
 
 # Pin to a specific commit SHA
 cargo install --git https://github.com/Hara-Horizon/hh-docversion.git --rev <COMMIT_SHA> cargo-docversion
@@ -71,9 +71,9 @@ To integrate `docversion` engines into another Rust project:
 
 ~~~toml
 [dependencies]
-docversion-core = { git = "https://github.com/Hara-Horizon/hh-docversion.git", tag = "v0.1.0" }
-docversion-git = { git = "https://github.com/Hara-Horizon/hh-docversion.git", tag = "v0.1.0" }
-docversion-manifest = { git = "https://github.com/Hara-Horizon/hh-docversion.git", tag = "v0.1.0" }
+docversion-core = { git = "https://github.com/Hara-Horizon/hh-docversion.git", tag = "v0.2.0" }
+docversion-git = { git = "https://github.com/Hara-Horizon/hh-docversion.git", tag = "v0.2.0" }
+docversion-manifest = { git = "https://github.com/Hara-Horizon/hh-docversion.git", tag = "v0.2.0" }
 ~~~
 
 ---
@@ -166,7 +166,7 @@ cargo hh-docversion verify-db \
   --manifest schema_matrix.json \
   --schema core-ledger \
   --db-version 1 \
-  --app-version 0.1.0
+  --app-version 0.2.0
 ~~~
 
 ---

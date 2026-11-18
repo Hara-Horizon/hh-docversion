@@ -1,4 +1,4 @@
-# Crate `docversion-manifest` (`v0.1.0`)
+# Crate `docversion-manifest` (`v0.2.0`)
 
 [← Back to Workspace Index](./README.md) · [Full API Reference](./api-reference.md)
 

@@ -1,4 +1,4 @@
-# Crate `cargo-docversion` (`v0.1.0`)
+# Crate `cargo-docversion` (`v0.2.0`)
 
 [← Back to Workspace Index](./README.md) · [Full API Reference](./api-reference.md)
 
@@ -110,16 +110,6 @@ pub fn format_assertions_markdown(out: &mut String, assertions: &[ExtractedAsser
 * `no_deps: bool` - Skip documenting dependent crates
 * `workspace: bool` - Document all packages in the workspace
 * `cargo_args: Vec<String>` - Pass additional flags directly to cargo doc
-
-## `struct BuildSiteArgs`
-
-**Fields:**
-
-* `source: PathBuf` - Path to documentation source directory (defaults to target/doc)
-* `version: Option<String>` - Explicit SemVer version for distribution (inferred from workspace if omitted)
-* `entry_page: String` - Landing page relative path within docs
-* `out_dir: PathBuf` - Output directory for bundled distribution
-* `format: DocFormat` - Output format mode
 
 ## `struct ExportMdArgs`
 

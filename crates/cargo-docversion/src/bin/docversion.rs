@@ -6,7 +6,7 @@ fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
 
     if args.iter().any(|arg| arg == "--version" || arg == "-V") {
-        println!("hh-docversion 0.1.0");
+        println!("hh-docversion 0.2.0");
         return Ok(());
     }
 

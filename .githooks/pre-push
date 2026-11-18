@@ -1,14 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-echo "==> Running pre-push workspace checks..."
-cargo check --workspace --all-targets
-cargo test --workspace
-cargo clippy --workspace --all-targets -- -D warnings
+# Anchor execution to the repository root
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "$REPO_ROOT"
 
-echo "==> Verifying binary installation and site packaging..."
-cargo doc --no-deps
-cargo install --path crates/cargo-docversion --force
+echo "==> [01_HAPSAY] Running locked workspace compilation and test suite..."
+cargo check --workspace --all-targets --locked
+cargo test --workspace --locked
+cargo clippy --workspace --all-targets --locked -- -D warnings
+
+echo "==> [02_HAPSAY] Verifying binary installation and site packaging..."
+cargo doc --no-deps --locked
+cargo install --path crates/cargo-docversion --force --locked
 
 # Verify deprecated 'build-site' is completely purged from CLI help
 if docversion --help | grep -q "build-site"; then
@@ -27,7 +31,8 @@ if ! docversion --help > /dev/null; then
     exit 1
 fi
 
-# Test standalone binary & consolidated site subcommand
+# Clean and test standalone binary & consolidated site subcommand
+rm -rf target/prepush_site
 docversion site --out-dir target/prepush_site
 
 # Test Cargo plugin invocation
@@ -38,4 +43,4 @@ test -f target/prepush_site/versions.json
 test -f target/prepush_site/index.html
 test -d target/prepush_site/latest
 
-echo "==> Pre-push verification passed."
+echo "==> [02_HAPSAY] Pre-push verification passed successfully."
