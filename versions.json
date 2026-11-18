@@ -1,6 +1,11 @@
 {
-  "latest": "0.1.0",
+  "latest": "0.2.0",
   "versions": [
+    {
+      "version": "0.2.0",
+      "path": "v0.2.0/",
+      "revision": "rev.9459194"
+    },
     {
       "version": "0.1.0",
       "path": "v0.1.0/",
