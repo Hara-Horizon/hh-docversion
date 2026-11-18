@@ -10,6 +10,12 @@ echo "==> Verifying binary installation and site packaging..."
 cargo doc --no-deps
 cargo install --path crates/cargo-docversion --force
 
+# Verify deprecated 'build-site' is completely purged from CLI help
+if docversion --help | grep -q "build-site"; then
+    echo "Error: deprecated 'build-site' command still present in CLI help!" >&2
+    exit 1
+fi
+
 # Test standalone binary & consolidated site subcommand
 docversion --version
 docversion site --out-dir target/prepush_site

@@ -1467,9 +1467,6 @@ pub enum Commands {
     /// Document workspace crates with version-injected banners
     Doc(DocArgs),
 
-    /// Assemble versioned distribution tree into target directory
-    BuildSite(BuildSiteArgs),
-
     /// Export tracked Markdown docs/ directory (README.md index, per-module .md files, api-reference.md)
     ExportMd(ExportMdArgs),
 
@@ -1511,29 +1508,6 @@ pub struct DocArgs {
 }
 
 #[derive(Args, Debug)]
-pub struct BuildSiteArgs {
-    /// Path to documentation source directory (defaults to target/doc)
-    #[arg(long, default_value = "target/doc")]
-    pub source: PathBuf,
-
-    /// Explicit SemVer version for distribution (inferred from workspace if omitted)
-    #[arg(long)]
-    pub version: Option<String>,
-
-    /// Landing page relative path within docs
-    #[arg(long, default_value = "index.html")]
-    pub entry_page: String,
-
-    /// Output directory for bundled distribution
-    #[arg(long, default_value = "target/doc_site")]
-    pub out_dir: PathBuf,
-
-    /// Output format mode
-    #[arg(long, value_enum, default_value_t = DocFormat::Standard)]
-    pub format: DocFormat,
-}
-
-#[derive(Args, Debug)]
 pub struct ExportMdArgs {
     /// Output directory for tracked Markdown documentation tree
     #[arg(long, default_value = "docs")]
@@ -1563,8 +1537,20 @@ pub struct VerifyDbArgs {
     pub artifact: Option<PathBuf>,
 }
 
-#[derive(Args, Debug)]
+#[derive(Args, Debug, Clone)]
 pub struct SiteArgs {
+    /// Path to documentation source directory (defaults to target/doc)
+    #[arg(long, default_value = "target/doc")]
+    pub source: PathBuf,
+
+    /// Explicit SemVer version for distribution (inferred from workspace if omitted)
+    #[arg(long)]
+    pub version: Option<String>,
+
+    /// Landing page relative path within docs
+    #[arg(long, default_value = "index.html")]
+    pub entry_page: String,
+
     /// Output directory for bundled distribution
     #[arg(long, default_value = "target/doc_site")]
     pub out_dir: PathBuf,
@@ -1596,7 +1582,6 @@ pub fn run_cargo_plugin(cli: CargoCli) -> Result<()> {
 pub fn run_cli(cli: DocversionCli) -> Result<()> {
     match cli.command {
         Commands::Doc(args) => execute_doc(args),
-        Commands::BuildSite(args) => execute_build_site(args),
         Commands::ExportMd(args) => execute_export_md(args),
         Commands::RepoMetadata(args) => execute_repo_metadata(&args),
         Commands::GithubMeta(args) => execute_github_meta(&args),
@@ -1984,23 +1969,15 @@ fn execute_doc(args: DocArgs) -> Result<()> {
 }
 
 fn execute_site(args: SiteArgs) -> Result<()> {
+    // 1. Compile documentation first
     execute_doc(DocArgs {
         no_deps: true,
         workspace: true,
         cargo_args: vec![],
     })?;
 
-    execute_build_site(BuildSiteArgs {
-        source: PathBuf::from("target/doc"),
-        version: None,
-        entry_page: "index.html".to_string(),
-        out_dir: args.out_dir,
-        format: args.format,
-    })
-}
-
-fn execute_build_site(args: BuildSiteArgs) -> Result<()> {
-    let resolved_version = match args.version {
+    // 2. Resolve version and metadata
+    let resolved_version = match args.version.clone() {
         Some(v) => v,
         None => {
             let metadata = MetadataCommand::new()
@@ -2014,9 +1991,10 @@ fn execute_build_site(args: BuildSiteArgs) -> Result<()> {
         }
     };
 
+    let source = PathBuf::from("target/doc");
     println!(
         "==> docversion: Packaging site for {} (version: {}) into {}",
-        args.source.display(),
+        source.display(),
         resolved_version,
         args.out_dir.display()
     );
@@ -2044,13 +2022,13 @@ fn execute_build_site(args: BuildSiteArgs) -> Result<()> {
         fs::remove_dir_all(&version_dir)?;
     }
     fs::create_dir_all(&version_dir)?;
-    copy_dir_recursive(&args.source, &version_dir)?;
+    copy_dir_recursive(&source, &version_dir)?;
     patch_distribution_versions(&version_dir, &resolved_version)?;
 
     if latest_dir.exists() {
         fs::remove_dir_all(&latest_dir)?;
     }
-    copy_dir_recursive(&args.source, &latest_dir)?;
+    copy_dir_recursive(&source, &latest_dir)?;
     patch_distribution_versions(&latest_dir, &resolved_version)?;
 
     let redirect_target = format!("latest/{}/index.html", crate_ident);
