@@ -56,8 +56,8 @@ jobs:
 
       - name: Verify cargo-docversion plugin
         run: |
-          cargo docversion --version
-          cargo docversion --help
+          cargo hh-docversion --version
+          cargo hh-docversion --help
 
       - name: Dogfood documentation build
         run: |
