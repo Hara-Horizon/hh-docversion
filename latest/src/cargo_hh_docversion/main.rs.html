@@ -229,7 +229,7 @@ data-theme="ayu"></script><meta name="rustdoc-vars" data-root-path="../../" data
   </div>
 
   <div style="display:flex; align-items:center;">
-    <span class="hh-tag">[REV: <span style="color:var(--hh-fg);">rev.9174092</span>]</span>
+    <span class="hh-tag">[REV: <span style="color:var(--hh-fg);">rev.9841a67</span>]</span>
   </div>
 </div>
 
@@ -294,36 +294,18 @@ data-theme="ayu"></script><meta name="rustdoc-vars" data-root-path="../../" data
   });
 })();
 </script>
-<nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">cargo_hh_docversion/</div>main.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-2"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="kw">use </span>clap::Parser;
-<a href=#2 id=2 data-nosnippet>2</a>
-<a href=#3 id=3 data-nosnippet>3</a><span class="kw">fn </span>main() {
-<a href=#4 id=4 data-nosnippet>4</a>    <span class="kw">let </span>raw: Vec&lt;String&gt; = std::env::args().collect();
-<a href=#5 id=5 data-nosnippet>5</a>
-<a href=#6 id=6 data-nosnippet>6</a>    <span class="comment">// Cargo passes [".../cargo-hh-docversion", "hh-docversion", ...].
-<a href=#7 id=7 data-nosnippet>7</a>    // Strip the binary name (arg 0) and the forwarded subcommand ("hh-docversion" or "docversion") if present.
-<a href=#8 id=8 data-nosnippet>8</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>clean_args: Vec&lt;String&gt; = Vec::with_capacity(raw.len());
-<a href=#9 id=9 data-nosnippet>9</a>    clean_args.push(raw.first().cloned().unwrap_or_else(|| <span class="string">"docversion"</span>.to_string()));
-<a href=#10 id=10 data-nosnippet>10</a>
-<a href=#11 id=11 data-nosnippet>11</a>    <span class="kw">let </span><span class="kw-2">mut </span>iter = raw.into_iter().skip(<span class="number">1</span>);
-<a href=#12 id=12 data-nosnippet>12</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(first) = iter.next() {
-<a href=#13 id=13 data-nosnippet>13</a>        <span class="kw">if </span>first != <span class="string">"hh-docversion" </span>&amp;&amp; first != <span class="string">"docversion" </span>{
-<a href=#14 id=14 data-nosnippet>14</a>            clean_args.push(first);
-<a href=#15 id=15 data-nosnippet>15</a>        }
-<a href=#16 id=16 data-nosnippet>16</a>    }
-<a href=#17 id=17 data-nosnippet>17</a>    clean_args.extend(iter);
-<a href=#18 id=18 data-nosnippet>18</a>
-<a href=#19 id=19 data-nosnippet>19</a>    <span class="comment">// try_parse_from returns clap::Error for --help and --version as well.
-<a href=#20 id=20 data-nosnippet>20</a>    // e.exit() prints the text to stdout/stderr and exits with code 0 (for help/version)
-<a href=#21 id=21 data-nosnippet>21</a>    // or code 2 / non-zero for actual syntax errors.
-<a href=#22 id=22 data-nosnippet>22</a>    </span><span class="kw">let </span>cli = <span class="kw">match </span>cargo_docversion::DocversionCli::try_parse_from(<span class="kw-2">&amp;</span>clean_args) {
-<a href=#23 id=23 data-nosnippet>23</a>        <span class="prelude-val">Ok</span>(c) =&gt; c,
-<a href=#24 id=24 data-nosnippet>24</a>        <span class="prelude-val">Err</span>(e) =&gt; {
-<a href=#25 id=25 data-nosnippet>25</a>            e.exit();
-<a href=#26 id=26 data-nosnippet>26</a>        }
-<a href=#27 id=27 data-nosnippet>27</a>    };
-<a href=#28 id=28 data-nosnippet>28</a>
-<a href=#29 id=29 data-nosnippet>29</a>    <span class="kw">if let </span><span class="prelude-val">Err</span>(err) = cargo_docversion::run_cli(cli) {
-<a href=#30 id=30 data-nosnippet>30</a>        <span class="macro">eprintln!</span>(<span class="string">"[docversion error] Execution failed: {:#}"</span>, err);
-<a href=#31 id=31 data-nosnippet>31</a>        std::process::exit(<span class="number">1</span>);
-<a href=#32 id=32 data-nosnippet>32</a>    }
-<a href=#33 id=33 data-nosnippet>33</a>}</code></pre></div></section></main></body></html>
+<nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">cargo_hh_docversion/</div>main.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-2"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="kw">use </span>anyhow::Result;
+<a href=#2 id=2 data-nosnippet>2</a><span class="kw">use </span>cargo_docversion::{DocversionCli, run_cli};
+<a href=#3 id=3 data-nosnippet>3</a><span class="kw">use </span>clap::Parser;
+<a href=#4 id=4 data-nosnippet>4</a>
+<a href=#5 id=5 data-nosnippet>5</a><span class="kw">fn </span>main() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#6 id=6 data-nosnippet>6</a>    <span class="kw">let </span>args: Vec&lt;String&gt; = std::env::args().collect();
+<a href=#7 id=7 data-nosnippet>7</a>
+<a href=#8 id=8 data-nosnippet>8</a>    <span class="kw">if </span>args.iter().any(|arg| arg == <span class="string">"--version" </span>|| arg == <span class="string">"-V"</span>) {
+<a href=#9 id=9 data-nosnippet>9</a>        <span class="macro">println!</span>(<span class="string">"hh-docversion 0.1.0"</span>);
+<a href=#10 id=10 data-nosnippet>10</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(());
+<a href=#11 id=11 data-nosnippet>11</a>    }
+<a href=#12 id=12 data-nosnippet>12</a>
+<a href=#13 id=13 data-nosnippet>13</a>    <span class="kw">let </span>cli = DocversionCli::parse();
+<a href=#14 id=14 data-nosnippet>14</a>    run_cli(cli)
+<a href=#15 id=15 data-nosnippet>15</a>}</code></pre></div></section></main></body></html>

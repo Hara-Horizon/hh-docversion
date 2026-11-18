@@ -10,6 +10,12 @@
 
 > Universal version-aware documentation site bundler and DB schema matrix contract verifier.
 
+### `struct DocversionCli`
+
+**Fields:**
+
+* `command: Commands`
+
 ### `struct CrateMetadata`
 
 **Fields:**
@@ -120,12 +126,6 @@ pub fn format_assertions_markdown(out: &mut String, assertions: &[ExtractedAsser
 **Variants:**
 
 * `Docversion`
-
-### `struct DocversionCli`
-
-**Fields:**
-
-* `command: Commands`
 
 ### `enum Commands`
 
