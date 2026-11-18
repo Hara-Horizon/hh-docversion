@@ -19,7 +19,7 @@
         "command-line-utilities",
         "development-tools::cargo-plugins"
       ],
-      "intent_summary": null
+      "intent_summary": "Universal version-aware documentation site bundler and DB schema matrix contract verifier."
     },
     {
       "name": "docversion-core",
@@ -28,9 +28,15 @@
       "homepage": "https://harahorizon.com",
       "repository": "https://github.com/Hara-Horizon/hh-docversion",
       "documentation": null,
-      "keywords": [],
+      "keywords": [
+        "bundler",
+        "documentation",
+        "routing",
+        "synthesis",
+        "workspace"
+      ],
       "categories": [],
-      "intent_summary": "Multi-version documentation bundler and schema contract verification engine."
+      "intent_summary": "Core path routing, redirect synthesis, and doc bundler logic for hh-docversion."
     },
     {
       "name": "docversion-git",
@@ -39,20 +45,32 @@
       "homepage": "https://harahorizon.com",
       "repository": "https://github.com/Hara-Horizon/hh-docversion",
       "documentation": null,
-      "keywords": [],
+      "keywords": [
+        "git",
+        "gitoxide",
+        "gix",
+        "hash",
+        "revision"
+      ],
       "categories": [],
-      "intent_summary": null
+      "intent_summary": "In-process Git tree hash and revision resolver for hh-docversion."
     },
     {
       "name": "docversion-manifest",
       "version": "0.1.0",
       "description": "Schema compatibility matrix parser and contract assertions for hh-docversion",
-      "homepage": null,
+      "homepage": "https://harahorizon.com",
       "repository": "https://github.com/Hara-Horizon/hh-docversion",
       "documentation": null,
-      "keywords": [],
+      "keywords": [
+        "assertions",
+        "compatibility",
+        "contract",
+        "matrix",
+        "schema"
+      ],
       "categories": [],
-      "intent_summary": null
+      "intent_summary": "Schema compatibility matrix parser and contract assertions for hh-docversion."
     }
   ]
 }

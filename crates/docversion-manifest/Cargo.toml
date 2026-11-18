@@ -7,6 +7,8 @@ rust-version.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
+homepage.workspace = true
+keywords = ["assertions", "compatibility", "contract", "matrix", "schema"]
 
 [dependencies]
 docversion-core = { path = "../docversion-core", version = "0.1.0" }

@@ -50,6 +50,12 @@ pub struct RepoMetadataArgs {
     pub out: PathBuf,
 }
 
+#[derive(Args, Debug)]
+pub struct GithubMetaArgs {
+    /// Path to synthesized repo_metadata.json manifest
+    #[arg(long, default_value = "repo_metadata.json")]
+    pub manifest: PathBuf,
+}
 
 /// Context carried through Pass 2 Markdown rendering for exact cross-crate link resolution.
 struct RenderContext<'a> {
@@ -1467,6 +1473,9 @@ pub enum Commands {
     /// Synthesize deterministic repo_metadata.json from Cargo.toml and Intent blocks
     RepoMetadata(RepoMetadataArgs),
 
+    /// Validate and preview repository metadata against GitHub constraints offline
+    GithubMeta(GithubMetaArgs),
+
     /// Verify application compatibility against schema migration matrix
     #[command(alias = "check")]
     VerifyDb(VerifyDbArgs),
@@ -1587,6 +1596,7 @@ pub fn run_cli(cli: DocversionCli) -> Result<()> {
         Commands::BuildSite(args) => execute_build_site(args),
         Commands::ExportMd(args) => execute_export_md(args),
         Commands::RepoMetadata(args) => execute_repo_metadata(&args),
+        Commands::GithubMeta(args) => execute_github_meta(&args),
         Commands::VerifyDb(args) => execute_verify_db(args),
         Commands::Site(args) => execute_site(args),
     }
@@ -2602,6 +2612,84 @@ fn execute_repo_metadata(args: &RepoMetadataArgs) -> Result<()> {
         "==> docversion: Deterministic repo_metadata.json synthesized successfully at {}",
         args.out.display()
     );
+    Ok(())
+}
+
+
+fn execute_github_meta(args: &GithubMetaArgs) -> Result<()> {
+    if !args.manifest.exists() {
+        bail!(
+            "Repository metadata manifest not found at: {}. Run `cargo hh-docversion repo-metadata` first.",
+            args.manifest.display()
+        );
+    }
+
+    println!(
+        "==> docversion: Validating and previewing GitHub metadata from {}...",
+        args.manifest.display()
+    );
+
+    let raw = fs::read(&args.manifest)
+        .with_context(|| format!("Failed to read manifest file: {}", args.manifest.display()))?;
+    
+    let repo_meta: RepoMetadata = serde_json::from_slice(&raw)
+        .context("Malformed repo_metadata.json manifest JSON")?;
+
+    let mut has_errors = false;
+
+    println!("\n=== WORKSPACE REPOSITORY METADATA ===");
+    println!("Workspace: {}\n", repo_meta.workspace_name);
+
+    for (idx, crate_meta) in repo_meta.crates.iter().enumerate() {
+        println!("[{}] Crate: {} (v{})", idx + 1, crate_meta.name, crate_meta.version);
+        
+        // Validate description length
+        if let Some(desc) = &crate_meta.description {
+            let char_count = desc.chars().count();
+            if char_count > 350 {
+                println!("  ❌ Description exceeds GitHub limit of 350 characters (current: {})", char_count);
+                has_errors = true;
+            } else {
+                println!("  description: {} ({} chars)", desc, char_count);
+            }
+        } else {
+            println!("  description: [None]");
+        }
+
+        println!("  homepage: {}", crate_meta.homepage.as_deref().unwrap_or("[None]"));
+        println!("  repository: {}", crate_meta.repository.as_deref().unwrap_or("[None]"));
+        println!("  documentation: {}", crate_meta.documentation.as_deref().unwrap_or("[None]"));
+
+        // Validate topics / keywords
+        if crate_meta.keywords.len() > 20 {
+            println!("  ❌ Topics exceed GitHub maximum limit of 20 (current: {})", crate_meta.keywords.len());
+            has_errors = true;
+        }
+
+        let mut valid_keywords = Vec::new();
+        for kw in &crate_meta.keywords {
+            let kw_len = kw.chars().count();
+            let is_valid_chars = kw.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-');
+            
+            if kw_len > 35 {
+                println!("  ❌ Topic '{}' exceeds 35 character limit (length: {})", kw, kw_len);
+                has_errors = true;
+            } else if !is_valid_chars {
+                println!("  ❌ Topic '{}' contains invalid characters (must be lowercase alphanumeric and hyphens)", kw);
+                has_errors = true;
+            } else {
+                valid_keywords.push(kw.clone());
+            }
+        }
+        println!("  topics ({}/{} valid): {:?}", valid_keywords.len(), crate_meta.keywords.len(), valid_keywords);
+        println!("  intent_summary: {}\n", crate_meta.intent_summary.as_deref().unwrap_or("[None]"));
+    }
+
+    if has_errors {
+        bail!("GitHub metadata validation failed due to policy violations.");
+    }
+
+    println!("==> docversion: GitHub metadata validation passed successfully.");
     Ok(())
 }
 

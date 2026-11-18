@@ -8,6 +8,7 @@ authors.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
+keywords = ["git", "gitoxide", "gix", "hash", "revision"]
 
 [dependencies]
 docversion-core.workspace = true

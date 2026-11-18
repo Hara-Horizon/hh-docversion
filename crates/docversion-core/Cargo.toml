@@ -8,6 +8,7 @@ authors.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
+keywords = ["bundler", "documentation", "routing", "synthesis", "workspace"]
 
 [dependencies]
 semver = { workspace = true }
