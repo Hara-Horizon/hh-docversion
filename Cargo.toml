@@ -8,7 +8,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 rust-version = "1.85.0"
 authors = ["jhoanna <https://github.com/jhoanna>"]
@@ -30,6 +30,6 @@ syn = { version = "2.0", features = ["full", "visit", "extra-traits"] }
 thiserror = "1.0"
 
 # Declare internal workspace crates here so children can inherit them cleanly:
-docversion-core = { version = "0.1.0", path = "crates/docversion-core" }
-docversion-git = { version = "0.1.0", path = "crates/docversion-git" }
-docversion-manifest = { version = "0.1.0", path = "crates/docversion-manifest" }
+docversion-core = { version = "0.2.0", path = "crates/docversion-core" }
+docversion-git = { version = "0.2.0", path = "crates/docversion-git" }
+docversion-manifest = { version = "0.2.0", path = "crates/docversion-manifest" }
