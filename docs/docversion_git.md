@@ -2,6 +2,10 @@
 
 [← Back to Workspace Index](./README.md) · [Full API Reference](./api-reference.md)
 
+### **Intent Directive**
+
+> In-process Git tree hash and revision resolver for hh-docversion.
+
 ## `struct GitContext`
 
 **Fields:**

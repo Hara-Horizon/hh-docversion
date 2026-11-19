@@ -2,6 +2,49 @@
 
 [← Back to Workspace Index](./README.md) · [Full API Reference](./api-reference.md)
 
+### **Intent Directive**
+
+> Universal version-aware documentation site bundler and DB schema matrix contract verifier.
+
+## `struct DocversionCli`
+
+**Fields:**
+
+* `command: Commands`
+
+## `struct CrateMetadata`
+
+**Fields:**
+
+* `name: String`
+* `version: String`
+* `description: Option<String>`
+* `homepage: Option<String>`
+* `repository: Option<String>`
+* `documentation: Option<String>`
+* `keywords: Vec<String>`
+* `categories: Vec<String>`
+* `intent_summary: Option<String>`
+
+## `struct RepoMetadata`
+
+**Fields:**
+
+* `workspace_name: String`
+* `crates: Vec<CrateMetadata>`
+
+## `struct RepoMetadataArgs`
+
+**Fields:**
+
+* `out: PathBuf` - Output path for synthesized repo_metadata.json
+
+## `struct GithubMetaArgs`
+
+**Fields:**
+
+* `manifest: PathBuf` - Path to synthesized repo_metadata.json manifest
+
 ## `fn generate_markdown_summary`
 
 Two-pass workspace scanner: 1. Indexes all public symbols across workspace crates into `WorkspaceSymbolIndex`. 2. Renders public interfaces, doctests, multi-language files, and handwritten `docs/*.md` guides with resolved cross-crate intra-doc links.
@@ -80,19 +123,14 @@ pub fn format_assertions_markdown(out: &mut String, assertions: &[ExtractedAsser
 
 * `Docversion`
 
-## `struct DocversionCli`
-
-**Fields:**
-
-* `command: Commands`
-
 ## `enum Commands`
 
 **Variants:**
 
 * `Doc` - Document workspace crates with version-injected banners
-* `BuildSite` - Assemble versioned distribution tree into target directory
 * `ExportMd` - Export tracked Markdown docs/ directory (README.md index, per-module .md files, api-reference.md)
+* `RepoMetadata` - Synthesize deterministic repo_metadata.json from Cargo.toml and Intent blocks
+* `GithubMeta` - Validate and preview repository metadata against GitHub constraints offline
 * `VerifyDb` - Verify application compatibility against schema migration matrix
 * `Site` - One-shot build: compiles documentation and bundles versioned site
 
@@ -131,6 +169,9 @@ pub fn format_assertions_markdown(out: &mut String, assertions: &[ExtractedAsser
 
 **Fields:**
 
+* `source: PathBuf` - Path to documentation source directory (defaults to target/doc)
+* `version: Option<String>` - Explicit SemVer version for distribution (inferred from workspace if omitted)
+* `entry_page: String` - Landing page relative path within docs
 * `out_dir: PathBuf` - Output directory for bundled distribution
 * `format: DocFormat` - Output format mode
 

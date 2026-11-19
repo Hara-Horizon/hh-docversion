@@ -2,6 +2,10 @@
 
 [← Back to Workspace Index](./README.md) · [Full API Reference](./api-reference.md)
 
+### **Intent Directive**
+
+> Schema compatibility matrix parser and contract assertions for hh-docversion.
+
 ## `enum ContractError`
 
 **Variants:**

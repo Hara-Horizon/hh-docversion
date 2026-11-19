@@ -2,6 +2,10 @@
 
 [← Back to Workspace Index](./README.md) · [Full API Reference](./api-reference.md)
 
+### **Intent Directive**
+
+> Core path routing, redirect synthesis, and doc bundler logic for hh-docversion.
+
 ## Module [`shortcut`](./docversion_core/shortcut.md)
 
 ## Module [`xref`](./docversion_core/xref.md)
