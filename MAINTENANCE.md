@@ -1,7 +1,7 @@
 # Maintenance Policy & Stewardship
 
-**Status:** Minimal Maintenance / Open to Community Governance  
-**Original Author / Sponsor:** Hara Horizon Software Systems Inc.  
+**Status:** Minimal Maintenance / Open to Community Governance
+**Original Author / Sponsor:** Hara Horizon Software Systems Inc.
 **Primary License:** Dual MIT OR Apache-2.0
 
 ---

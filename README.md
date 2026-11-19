@@ -117,18 +117,18 @@ Document your modules and types using clean markdown or blockquote tags. `hh-doc
 //! # Stage 04: Tuos
 //! Double-entry transactional reconciliation engine.
 //!
-//! > **🎯 INTENT**  
-//! > Guarantees exact ledger accounting and verification. Tuos acts as  
+//! > **🎯 INTENT**
+//! > Guarantees exact ledger accounting and verification. Tuos acts as
 //! > the terminal validator for financial events before persistent journal serialization.
 //!
-//! > **🛡️ INVARIANT**  
-//! > - Zero-sum debit and credit balances across every committed journal transaction.  
+//! > **🛡️ INVARIANT**
+//! > - Zero-sum debit and credit balances across every committed journal transaction.
 //! > - Monotonic sequence increments: rejected if timestamp or index regresses.
 //!
-//! > **⛔ NON-GOAL**  
+//! > **⛔ NON-GOAL**
 //! > External distributed consensus or unsanctioned state recovery.
 //!
-//! > **📝 NOTE**  
+//! > **📝 NOTE**
 //! > Replay integrity relies on uncorrupted cryptographic hash chains.
 ~~~
 
