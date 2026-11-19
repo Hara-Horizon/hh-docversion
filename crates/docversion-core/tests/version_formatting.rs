@@ -1,4 +1,4 @@
-use docversion_core::{generate_redirect_html, VersionIdentifier};
+use docversion_core::{VersionIdentifier, generate_redirect_html};
 
 #[test]
 fn test_version_identifier_with_revision() {
@@ -24,7 +24,10 @@ fn test_invalid_semver_fails() {
 fn test_redirect_html_output() {
     let html =
         generate_redirect_html("/latest/my_crate/index.html").expect("Failed to generate redirect");
-    assert!(html
-        .contains(r#"<meta http-equiv="refresh" content="0; url=/latest/my_crate/index.html">"#));
+    assert!(
+        html.contains(
+            r#"<meta http-equiv="refresh" content="0; url=/latest/my_crate/index.html">"#
+        )
+    );
     assert!(html.contains(r#"<a href="/latest/my_crate/index.html">"#));
 }

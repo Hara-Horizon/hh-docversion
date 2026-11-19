@@ -93,7 +93,8 @@ impl WorkspaceSymbolIndex {
         if let Some(rest) = normalized_path.strip_prefix("Self::") {
             if let Some(ty) = current_type {
                 let qualified_method = format!("{}::{}", ty, rest);
-                if let Some(entry) = self.resolve_short_or_suffix(&qualified_method, current_crate) {
+                if let Some(entry) = self.resolve_short_or_suffix(&qualified_method, current_crate)
+                {
                     return Some(entry);
                 }
             }
@@ -108,11 +109,7 @@ impl WorkspaceSymbolIndex {
         self.resolve_short_or_suffix(&normalized_path, current_crate)
     }
 
-    fn resolve_short_or_suffix(
-        &self,
-        needle: &str,
-        current_crate: &str,
-    ) -> Option<&SymbolEntry> {
+    fn resolve_short_or_suffix(&self, needle: &str, current_crate: &str) -> Option<&SymbolEntry> {
         if let Some(candidates) = self.by_short_name.get(needle) {
             if let Some(same_crate) = candidates.iter().find(|e| e.crate_ident == current_crate) {
                 return Some(same_crate);
@@ -303,9 +300,7 @@ pub fn relative_doc_path(from_file: &str, to_file: &str) -> String {
     };
 
     let mut common = 0;
-    while common < from_dirs.len()
-        && common < to_dirs.len()
-        && from_dirs[common] == to_dirs[common]
+    while common < from_dirs.len() && common < to_dirs.len() && from_dirs[common] == to_dirs[common]
     {
         common += 1;
     }
@@ -394,7 +389,9 @@ mod tests {
 
         let resolved = idx.resolve_markdown_links(input, "cargo_docversion", None);
 
-        assert!(resolved.contains("[`docversion_core::VersionIdentifier`](#struct-versionidentifier)"));
+        assert!(
+            resolved.contains("[`docversion_core::VersionIdentifier`](#struct-versionidentifier)")
+        );
         assert!(resolved.contains("[`VersionIdentifier::new`](#fn-new-impl-versionidentifier)"));
         assert!(resolved.contains("[shortcut cleaner](#fn-sanitize_for_shortcut_docs)"));
         assert!(resolved.contains("Unknown [`Result`] remains untouched."));
@@ -405,10 +402,15 @@ mod tests {
         let idx = sample_index();
         let text = "Calls [`VersionIdentifier::new`] and [`sanitize_for_shortcut_docs`].";
 
-        let from_other_crate =
-            idx.resolve_multifile_markdown_links(text, "cargo_docversion", None, "cargo_docversion.md");
-        assert!(from_other_crate
-            .contains("[`VersionIdentifier::new`](./docversion_core.md#fn-new-impl-versionidentifier)"));
+        let from_other_crate = idx.resolve_multifile_markdown_links(
+            text,
+            "cargo_docversion",
+            None,
+            "cargo_docversion.md",
+        );
+        assert!(from_other_crate.contains(
+            "[`VersionIdentifier::new`](./docversion_core.md#fn-new-impl-versionidentifier)"
+        ));
         assert!(from_other_crate.contains(
             "[`sanitize_for_shortcut_docs`](./docversion_core/shortcut.md#fn-sanitize_for_shortcut_docs)"
         ));
@@ -419,9 +421,12 @@ mod tests {
             None,
             "docversion_core/shortcut.md",
         );
-        assert!(from_nested_mod
-            .contains("[`VersionIdentifier::new`](../docversion_core.md#fn-new-impl-versionidentifier)"));
-        assert!(from_nested_mod
-            .contains("[`sanitize_for_shortcut_docs`](#fn-sanitize_for_shortcut_docs)"));
+        assert!(from_nested_mod.contains(
+            "[`VersionIdentifier::new`](../docversion_core.md#fn-new-impl-versionidentifier)"
+        ));
+        assert!(
+            from_nested_mod
+                .contains("[`sanitize_for_shortcut_docs`](#fn-sanitize_for_shortcut_docs)")
+        );
     }
 }

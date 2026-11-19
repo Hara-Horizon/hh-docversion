@@ -15,7 +15,9 @@ pub enum ContractError {
     Semver(#[from] semver::Error),
     #[error("Artifact I/O failure: {0}")]
     Io(#[from] io::Error),
-    #[error("Contract violation: App v{app_ver} fails requirements '{range}' for schema '{schema_id}' v{schema_ver}")]
+    #[error(
+        "Contract violation: App v{app_ver} fails requirements '{range}' for schema '{schema_id}' v{schema_ver}"
+    )]
     RangeMismatch {
         app_ver: Version,
         range: String,
@@ -170,15 +172,21 @@ mod tests {
             }],
         };
 
-        assert!(matrix
-            .verify_compatibility("1.5.0", "core-ledger", 4)
-            .is_ok());
-        assert!(matrix
-            .verify_compatibility("2.1.0", "core-ledger", 4)
-            .is_err());
-        assert!(matrix
-            .verify_compatibility("1.5.0", "core-ledger", 5)
-            .is_err());
+        assert!(
+            matrix
+                .verify_compatibility("1.5.0", "core-ledger", 4)
+                .is_ok()
+        );
+        assert!(
+            matrix
+                .verify_compatibility("2.1.0", "core-ledger", 4)
+                .is_err()
+        );
+        assert!(
+            matrix
+                .verify_compatibility("1.5.0", "core-ledger", 5)
+                .is_err()
+        );
     }
 
     #[test]

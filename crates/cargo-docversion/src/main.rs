@@ -38,7 +38,11 @@ mod tests {
         }
 
         let result = DocversionCli::try_parse_from(args);
-        assert!(result.is_ok(), "Failed to parse sanitized cargo subcommand args: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to parse sanitized cargo subcommand args: {:?}",
+            result.err()
+        );
     }
 
     #[test]
@@ -52,6 +56,10 @@ mod tests {
         ];
 
         let result = DocversionCli::try_parse_from(args);
-        assert!(result.is_ok(), "Failed to parse standalone binary args: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to parse standalone binary args: {:?}",
+            result.err()
+        );
     }
 }

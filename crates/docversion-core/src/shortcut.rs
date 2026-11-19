@@ -9,7 +9,8 @@ const PRE_STYLE: &str = "font-family: 'SF Mono', Menlo, Monaco, Consolas, monosp
 const INLINE_CODE_STYLE: &str = "font-family: 'SF Mono', Menlo, Monaco, Consolas, monospace; font-size: 12.5px; background-color: #eff1f3; color: #0550ae;";
 const TABLE_STYLE: &str = "border-collapse: collapse; width: 100%; font-size: 13px;";
 const TH_STYLE: &str = "border: 1px solid #d0d7de; background-color: #f6f8fa; color: #0f141c; font-weight: 600; text-align: left; padding: 6px 10px;";
-const TD_STYLE: &str = "border: 1px solid #d0d7de; color: #1f2328; padding: 6px 10px; vertical-align: top;";
+const TD_STYLE: &str =
+    "border: 1px solid #d0d7de; color: #1f2328; padding: 6px 10px; vertical-align: top;";
 
 /// Sanitizes generated Markdown for zero-friction import into Shortcut Docs.
 ///
@@ -403,13 +404,62 @@ pub fn highlight_code_universal(line: &str) -> String {
 fn is_universal_keyword(word: &str) -> bool {
     matches!(
         word,
-        "pub" | "fn" | "struct" | "enum" | "trait" | "impl" | "mod" | "use" | "let" | "mut"
-            | "const" | "static" | "match" | "if" | "else" | "for" | "while" | "loop" | "return"
-            | "async" | "await" | "where" | "type" | "self" | "Self" | "crate" | "super"
-            | "function" | "export" | "import" | "interface" | "class" | "extends" | "implements"
-            | "def" | "from" | "as" | "None" | "True" | "False" | "true" | "false" | "null"
-            | "func" | "package" | "var" | "defer" | "SELECT" | "FROM" | "WHERE" | "CREATE"
-            | "TABLE" | "PRIMARY" | "KEY" | "NOT" | "NULL"
+        "pub"
+            | "fn"
+            | "struct"
+            | "enum"
+            | "trait"
+            | "impl"
+            | "mod"
+            | "use"
+            | "let"
+            | "mut"
+            | "const"
+            | "static"
+            | "match"
+            | "if"
+            | "else"
+            | "for"
+            | "while"
+            | "loop"
+            | "return"
+            | "async"
+            | "await"
+            | "where"
+            | "type"
+            | "self"
+            | "Self"
+            | "crate"
+            | "super"
+            | "function"
+            | "export"
+            | "import"
+            | "interface"
+            | "class"
+            | "extends"
+            | "implements"
+            | "def"
+            | "from"
+            | "as"
+            | "None"
+            | "True"
+            | "False"
+            | "true"
+            | "false"
+            | "null"
+            | "func"
+            | "package"
+            | "var"
+            | "defer"
+            | "SELECT"
+            | "FROM"
+            | "WHERE"
+            | "CREATE"
+            | "TABLE"
+            | "PRIMARY"
+            | "KEY"
+            | "NOT"
+            | "NULL"
     )
 }
 
@@ -571,10 +621,7 @@ fn strip_html_tags(input: &str) -> String {
 
 /// Maps select structural HTML tags to clean Markdown equivalents; drops all others.
 fn map_structural_tag(raw_tag: &str) -> &'static str {
-    let inner = raw_tag
-        .trim_start_matches('<')
-        .trim_end_matches('>')
-        .trim();
+    let inner = raw_tag.trim_start_matches('<').trim_end_matches('>').trim();
 
     let tag_name = inner
         .trim_start_matches('/')

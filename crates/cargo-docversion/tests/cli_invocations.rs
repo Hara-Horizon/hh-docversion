@@ -1,6 +1,6 @@
-use std::process::Command;
-use assert_fs::fixture::PathChild;
 use assert_fs::TempDir;
+use assert_fs::fixture::PathChild;
+use std::process::Command;
 
 #[test]
 fn test_cli_help_flag() {
@@ -51,9 +51,7 @@ fn test_cli_site_command() {
     let mut cmd = assert_cmd::Command::cargo_bin("docversion").unwrap();
     // Run from the repository workspace root so cargo metadata resolves successfully
     cmd.current_dir(env!("CARGO_MANIFEST_DIR").to_string() + "/../..");
-    cmd.arg("site")
-        .arg("--out-dir")
-        .arg(out_dir.path());
+    cmd.arg("site").arg("--out-dir").arg(out_dir.path());
 
     cmd.assert().success();
     assert!(out_dir.exists());
