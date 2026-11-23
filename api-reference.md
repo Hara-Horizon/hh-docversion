@@ -49,6 +49,16 @@
 
 * `manifest: PathBuf` - Path to synthesized repo_metadata.json manifest
 
+### `struct AuditClaimsArgs`
+
+**Fields:**
+
+* `manifest: PathBuf` - Path to backlog stories JSON manifest
+* `audit_log: PathBuf` - Path to audit NDJSON log file
+* `workspace_root: PathBuf` - Workspace root directory to inspect
+* `tickets: Vec<String>` - Specific ticket IDs to audit (comma-separated or multiple flags)
+* `fail_on_gap: bool` - Fail the command if any audit gaps or unverified claims are found
+
 ### `fn generate_markdown_summary`
 
 Two-pass workspace scanner: 1. Indexes all public symbols across workspace crates into `WorkspaceSymbolIndex`. 2. Renders public interfaces, doctests, multi-language files, and handwritten `docs/*.md` guides with resolved cross-crate intra-doc links.
@@ -71,8 +81,6 @@ pub fn export_tracked_docs_tree(workspace_root: &Path, out_dir: &Path) -> Result
 * `ErrorRejection`
 
 ### `struct ExtractedAssertion`
-
-Extracted runtime invariant check, assertion, or error rejection boundary.
 
 **Fields:**
 
@@ -133,6 +141,7 @@ pub fn format_assertions_markdown(out: &mut String, assertions: &[ExtractedAsser
 
 * `Doc` - Document workspace crates with version-injected banners
 * `ExportMd` - Export tracked Markdown docs/ directory (README.md index, per-module .md files, api-reference.md)
+* `AuditClaims` - Audit ticket claims and workspace backlog stories against audit logs
 * `RepoMetadata` - Synthesize deterministic repo_metadata.json from Cargo.toml and Intent blocks
 * `GithubMeta` - Validate and preview repository metadata against GitHub constraints offline
 * `VerifyDb` - Verify application compatibility against schema migration matrix
