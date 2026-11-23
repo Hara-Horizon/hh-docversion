@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["compute_doc_revision","is_working_tree_dirty"],"struct":["GitContext"]};
