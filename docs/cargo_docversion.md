@@ -78,8 +78,6 @@ pub fn export_tracked_docs_tree(workspace_root: &Path, out_dir: &Path) -> Result
 
 ## `struct ExtractedAssertion`
 
-Extracted runtime invariant check, assertion, or error rejection boundary.
-
 **Fields:**
 
 * `kind: InvariantKind`
