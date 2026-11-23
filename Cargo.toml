@@ -20,9 +20,9 @@ homepage = "https://harahorizon.com"
 anyhow = "1.0"
 cargo_metadata = "0.18"
 clap = { version = "4.5", features = ["derive"] }
-docversion-core = { version = "0.2.0", path = "crates/docversion-core" }
-docversion-git = { version = "0.2.0", path = "crates/docversion-git" }
-docversion-manifest = { version = "0.2.0", path = "crates/docversion-manifest" }
+docversion-core = { version = "0.3.0", path = "crates/docversion-core" }
+docversion-git = { version = "0.3.0", path = "crates/docversion-git" }
+docversion-manifest = { version = "0.3.0", path = "crates/docversion-manifest" }
 gix = { version = "0.73", default-features = false, features = ["status"] }
 quote = "1.0"
 serde = { version = "1.0", features = ["derive"] }
