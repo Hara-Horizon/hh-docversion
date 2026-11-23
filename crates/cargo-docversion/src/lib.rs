@@ -1668,7 +1668,9 @@ fn execute_audit_claims(args: &AuditClaimsArgs) -> Result<()> {
     let stories: Vec<BacklogStory> = serde_json::from_slice(&manifest_data)
         .or_else(|_| {
             #[derive(Deserialize)]
-            struct Wrapper { stories: Vec<BacklogStory> }
+            struct Wrapper {
+                stories: Vec<BacklogStory>,
+            }
             serde_json::from_slice::<Wrapper>(&manifest_data).map(|w| w.stories)
         })
         .context("Malformed backlog stories JSON manifest format")?;
@@ -1684,7 +1686,10 @@ fn execute_audit_claims(args: &AuditClaimsArgs) -> Result<()> {
             chrono::Utc::now().to_rfc3339()
         );
         fs::write(&args.audit_log, header_msg)?;
-        println!("==> docversion: Auto-initialized new audit log at {}", args.audit_log.display());
+        println!(
+            "==> docversion: Auto-initialized new audit log at {}",
+            args.audit_log.display()
+        );
     }
 
     let mut new_audit_entries = Vec::new();
@@ -1695,11 +1700,18 @@ fn execute_audit_claims(args: &AuditClaimsArgs) -> Result<()> {
         let story = stories.iter().find(|s| s.id == *target_ticket);
         match story {
             Some(s) => {
-                println!("\n[TICKET FOUND] ID: {} — Title: {:?}", s.id, s.title.as_deref().unwrap_or("Untitled"));
+                println!(
+                    "\n[TICKET FOUND] ID: {} — Title: {:?}",
+                    s.id,
+                    s.title.as_deref().unwrap_or("Untitled")
+                );
 
                 let verified = if target_ticket == "SC-M1-09" {
-                    let has_parsers = args.workspace_root.join("src").exists() || args.workspace_root.join("crates").exists();
-                    println!("  🔍 Inspecting workspace for gateway ingestion parsers (Wise, Payoneer, Stripe, BPI, UnionBank, BDO)...");
+                    let has_parsers = args.workspace_root.join("src").exists()
+                        || args.workspace_root.join("crates").exists();
+                    println!(
+                        "  🔍 Inspecting workspace for gateway ingestion parsers (Wise, Payoneer, Stripe, BPI, UnionBank, BDO)..."
+                    );
                     has_parsers
                 } else {
                     true
@@ -1711,7 +1723,10 @@ fn execute_audit_claims(args: &AuditClaimsArgs) -> Result<()> {
                         ticket: target_ticket.clone(),
                         timestamp: timestamp_now.clone(),
                         verified: true,
-                        details: format!("Verified claims and workspace compliance for {}", target_ticket),
+                        details: format!(
+                            "Verified claims and workspace compliance for {}",
+                            target_ticket
+                        ),
                     });
                 } else {
                     println!("  ❌ Workspace Verification: GAP DETECTED");
@@ -1723,7 +1738,10 @@ fn execute_audit_claims(args: &AuditClaimsArgs) -> Result<()> {
                 }
             }
             None => {
-                println!("\n[TICKET MISSING] ID: {} — ❌ Not found in backlog manifest!", target_ticket);
+                println!(
+                    "\n[TICKET MISSING] ID: {} — ❌ Not found in backlog manifest!",
+                    target_ticket
+                );
                 gaps_detected = true;
             }
         }
@@ -1739,10 +1757,16 @@ fn execute_audit_claims(args: &AuditClaimsArgs) -> Result<()> {
         use std::io::Write;
         writeln!(file_mut, "{}", serialized)?;
     }
-    println!("\n==> docversion: Appended verification records to {}", args.audit_log.display());
+    println!(
+        "\n==> docversion: Appended verification records to {}",
+        args.audit_log.display()
+    );
 
     if gaps_detected && args.fail_on_gap {
-        bail!("[FAIL-CLOSED] Audit failed: unverified claims or audit gaps detected for tickets: {:?}", args.tickets);
+        bail!(
+            "[FAIL-CLOSED] Audit failed: unverified claims or audit gaps detected for tickets: {:?}",
+            args.tickets
+        );
     }
 
     println!("==> docversion: Audit claims verification completed successfully.");
@@ -3038,9 +3062,9 @@ mod tests {
         ));
         assert!(clean_md.contains("~~~python\ndef verify_chain(blocks: list[str]) -> bool:\n~~~"));
         assert!(
-            clean_md.contains(
-                "~~~sql\nCREATE TABLE journal_entries (\n    id TEXT PRIMARY KEY\n);\nC"
-            ) || clean_md.contains("CREATE TABLE journal_entries")
+            clean_md
+                .contains("~~~sql\nCREATE TABLE journal_entries (\n    id TEXT PRIMARY KEY\n);\nC")
+                || clean_md.contains("CREATE TABLE journal_entries")
         );
     }
 }
