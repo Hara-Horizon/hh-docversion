@@ -36,6 +36,7 @@ serde_json.workspace = true
 semver.workspace = true
 syn = { workspace = true, features = ["full", "visit", "extra-traits"] }
 quote.workspace = true
+chrono = "0.4.45"
 
 [dev-dependencies]
 assert_fs = "1.0"
