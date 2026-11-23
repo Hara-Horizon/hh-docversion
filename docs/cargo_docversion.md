@@ -1,4 +1,4 @@
-# Crate `cargo-docversion` (`v0.2.0`)
+# Crate `cargo-docversion` (`v0.3.0`)
 
 [← Back to Workspace Index](./README.md) · [Full API Reference](./api-reference.md)
 

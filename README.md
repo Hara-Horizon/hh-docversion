@@ -37,27 +37,24 @@ Ensure you have a modern Rust toolchain installed (MSRV: **1.78+**):
 rustup update stable
 ~~~
 
-### Option 1: Install from GitHub (Recommended)
+### Option 1: Global Installation from Git (Recommended)
 
-Install the latest release directly from GitHub into `~/.cargo/bin`:
+Install the latest tagged release directly from GitHub into `~/.cargo/bin` so it is globally available across all your workspace repositories:
 
 ~~~bash
-cargo install --git https://github.com/Hara-Horizon/hh-docversion.git cargo-docversion
+cargo install --git https://github.com/Hara-Horizon/hh-docversion.git --tag v0.3.0 --force
 ~~~
 
-To pin to a specific release tag or commit SHA for reproducible CI pipelines:
+To pin to a specific commit SHA for reproducible CI pipelines:
 
 ~~~bash
-# Pin to a tagged release
-cargo install --git https://github.com/Hara-Horizon/hh-docversion.git --tag v0.2.0 cargo-docversion
-
 # Pin to a specific commit SHA
-cargo install --git https://github.com/Hara-Horizon/hh-docversion.git --rev <COMMIT_SHA> cargo-docversion
+cargo install --git https://github.com/Hara-Horizon/hh-docversion.git --rev <COMMIT_SHA> cargo-docversion --force
 ~~~
 
 ### Option 2: Build and Install from Local Source
 
-If you have cloned the repository locally:
+If you have cloned the repository locally inside `~/Projects/hh-docversion`:
 
 ~~~bash
 cargo install --path crates/cargo-docversion --force
@@ -71,9 +68,9 @@ To integrate `docversion` engines into another Rust project:
 
 ~~~toml
 [dependencies]
-docversion-core = { git = "https://github.com/Hara-Horizon/hh-docversion.git", tag = "v0.2.0" }
-docversion-git = { git = "https://github.com/Hara-Horizon/hh-docversion.git", tag = "v0.2.0" }
-docversion-manifest = { git = "https://github.com/Hara-Horizon/hh-docversion.git", tag = "v0.2.0" }
+docversion-core = { git = "https://github.com/Hara-Horizon/hh-docversion.git", tag = "v0.3.0" }
+docversion-git = { git = "https://github.com/Hara-Horizon/hh-docversion.git", tag = "v0.3.0" }
+docversion-manifest = { git = "https://github.com/Hara-Horizon/hh-docversion.git", tag = "v0.3.0" }
 ~~~
 
 ---
@@ -166,7 +163,7 @@ cargo hh-docversion verify-db \
   --manifest schema_matrix.json \
   --schema core-ledger \
   --db-version 1 \
-  --app-version 0.2.0
+  --app-version 0.3.0
 ~~~
 
 ---
@@ -184,6 +181,12 @@ The repository includes a two-tiered `.githooks/` suite optimized for high-veloc
 git config core.hooksPath .githooks
 chmod +x .githooks/pre-commit .githooks/pre-push
 ~~~
+
+---
+
+## Zero Telemetry & Privacy Guarantees
+
+`hh-docversion` operates entirely offline with zero telemetry collection, zero analytics beacons, and no external runtime network requests. All AST parsing, git interrogation, and LLM context synthesis happen locally within your trusted workspace boundary.
 
 ---
 

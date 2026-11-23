@@ -134,21 +134,40 @@ mod tests {
     use super::*;
 
     #[test]
-    fn parses_version_with_and_without_revision() {
-        let v1 = VersionIdentifier::new("v0.2.0", Some("rev.abc1234")).unwrap();
-        assert_eq!(v1.display_version(), "v0.2.0 (rev.abc1234)");
-        assert_eq!(v1.target_directory(), "v0.2.0");
+    fn parses_versions_dynamically() {
+        let test_cases = vec![
+            ("v0.2.0", Some("rev.abc1234"), "v0.2.0 (rev.abc1234)", "v0.2.0"),
+            ("1.0.0", None, "v1.0.0", "v1.0.0"),
+            // Match the actual normalized target_directory() output ("v3.5.1-beta")
+            ("3.5.1-beta", Some("rev.99ff0a"), "v3.5.1-beta (rev.99ff0a)", "v3.5.1-beta"),
+        ];
 
-        let v2 = VersionIdentifier::new("1.0.0", None).unwrap();
-        assert_eq!(v2.display_version(), "v1.0.0");
+        for (version, rev, expected_display, expected_target) in test_cases {
+            let v = VersionIdentifier::new(version, rev).unwrap();
+            assert_eq!(v.display_version(), expected_display);
+            assert_eq!(v.target_directory(), expected_target);
+        }
     }
 
     #[test]
-    fn rejects_unsafe_redirect_targets() {
-        assert!(generate_redirect_html("../etc/passwd").is_err());
-        assert!(generate_redirect_html("javascript:alert(1)").is_err());
-        assert!(generate_redirect_html("//evil.example.com/phish").is_err());
-        assert!(generate_redirect_html("/latest/my_crate/index.html").is_ok());
-        assert!(generate_redirect_html("latest/docversion/index.html").is_ok());
+    fn validates_redirect_targets_dynamically() {
+        let test_cases = vec![
+            ("../etc/passwd", false),
+            ("javascript:alert(1)", false),
+            ("//evil.example.com/phish", false),
+            ("/latest/my_crate/index.html", true),
+            ("latest/docversion/index.html", true),
+            ("https://harahorizon.com", false),
+        ];
+
+        for (target, should_be_ok) in test_cases {
+            let result = generate_redirect_html(target);
+            assert_eq!(
+                result.is_ok(),
+                should_be_ok,
+                "Failed expectation for target: '{}'",
+                target
+            );
+        }
     }
 }
