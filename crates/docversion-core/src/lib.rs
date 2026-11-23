@@ -136,10 +136,20 @@ mod tests {
     #[test]
     fn parses_versions_dynamically() {
         let test_cases = vec![
-            ("v0.2.0", Some("rev.abc1234"), "v0.2.0 (rev.abc1234)", "v0.2.0"),
+            (
+                "v0.2.0",
+                Some("rev.abc1234"),
+                "v0.2.0 (rev.abc1234)",
+                "v0.2.0",
+            ),
             ("1.0.0", None, "v1.0.0", "v1.0.0"),
             // Match the actual normalized target_directory() output ("v3.5.1-beta")
-            ("3.5.1-beta", Some("rev.99ff0a"), "v3.5.1-beta (rev.99ff0a)", "v3.5.1-beta"),
+            (
+                "3.5.1-beta",
+                Some("rev.99ff0a"),
+                "v3.5.1-beta (rev.99ff0a)",
+                "v3.5.1-beta",
+            ),
         ];
 
         for (version, rev, expected_display, expected_target) in test_cases {
