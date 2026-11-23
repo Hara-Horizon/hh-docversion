@@ -8,7 +8,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
 rust-version = "1.85.0"
 authors = ["jhoanna <https://github.com/jhoanna>"]
@@ -20,6 +20,9 @@ homepage = "https://harahorizon.com"
 anyhow = "1.0"
 cargo_metadata = "0.18"
 clap = { version = "4.5", features = ["derive"] }
+docversion-core = { version = "0.2.0", path = "crates/docversion-core" }
+docversion-git = { version = "0.2.0", path = "crates/docversion-git" }
+docversion-manifest = { version = "0.2.0", path = "crates/docversion-manifest" }
 gix = { version = "0.73", default-features = false, features = ["status"] }
 quote = "1.0"
 serde = { version = "1.0", features = ["derive"] }
@@ -28,8 +31,3 @@ semver = { version = "1.0", features = ["serde"] }
 sha2 = "0.10"
 syn = { version = "2.0", features = ["full", "visit", "extra-traits"] }
 thiserror = "1.0"
-
-# Declare internal workspace crates here so children can inherit them cleanly:
-docversion-core = { version = "0.2.0", path = "crates/docversion-core" }
-docversion-git = { version = "0.2.0", path = "crates/docversion-git" }
-docversion-manifest = { version = "0.2.0", path = "crates/docversion-manifest" }
